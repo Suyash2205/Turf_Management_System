@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { paymentStatusBadge, verificationBadge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { compressImage } from "@/lib/compress-image";
 
 interface Payment {
   id: string;
@@ -48,12 +49,25 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+  const [compressing, setCompressing] = useState(false);
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setProofImage(file);
-    setPreview(URL.createObjectURL(file));
     e.target.value = "";
+
+    setCompressing(true);
+    setError("");
+    try {
+      const compressed = await compressImage(file);
+      setProofImage(compressed);
+      setPreview(URL.createObjectURL(compressed));
+    } catch {
+      setProofImage(file);
+      setPreview(URL.createObjectURL(file));
+    } finally {
+      setCompressing(false);
+    }
   }
 
   function clearProofImage() {
@@ -69,27 +83,55 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
     setError("");
     setSuccess("");
 
-    const formData = new FormData();
-    formData.append("bookingId", booking.id);
-    formData.append("amount", amount);
-    formData.append("method", method);
-    if (proofImage) formData.append("proofImage", proofImage);
+    try {
+      if (method === "ONLINE" && !proofImage) {
+        setError("Please add a payment screenshot");
+        return;
+      }
 
-    const res = await fetch("/api/payments", { method: "POST", body: formData });
-    const data = await res.json();
+      const formData = new FormData();
+      formData.append("bookingId", booking.id);
+      formData.append("amount", amount);
+      formData.append("method", method);
+      if (proofImage) formData.append("proofImage", proofImage);
 
-    setLoading(false);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 90000);
 
-    if (!res.ok) {
-      setError(data.error || "Failed to record payment");
-      return;
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      const text = await res.text();
+      let data: { error?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Server error — please try again");
+      }
+
+      if (!res.ok) {
+        setError(data.error || "Failed to record payment");
+        return;
+      }
+
+      setSuccess("Payment recorded successfully!");
+      setAmount("");
+      clearProofImage();
+      router.refresh();
+      window.location.reload();
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setError("Request timed out — please try again with a smaller image");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to record payment");
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setSuccess("Payment recorded successfully!");
-    setAmount("");
-    clearProofImage();
-    router.refresh();
-    window.location.reload();
   }
 
   return (
@@ -204,7 +246,10 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
                       />
                     </label>
                   </div>
-                  {preview && (
+                  {compressing && (
+                    <p className="mt-2 text-xs text-slate-500">Preparing image…</p>
+                  )}
+                  {preview && !compressing && (
                     <div className="relative mt-2">
                       <img
                         src={preview}
@@ -226,8 +271,13 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
               {error && <p className="text-sm text-red-600">{error}</p>}
               {success && <p className="text-sm text-emerald-600">{success}</p>}
 
-              <Button type="submit" className="w-full" size="lg" disabled={loading}>
-                {loading ? "Submitting..." : "Submit Payment"}
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={loading || compressing}
+              >
+                {loading ? "Submitting..." : compressing ? "Preparing image..." : "Submit Payment"}
               </Button>
             </form>
           </CardContent>

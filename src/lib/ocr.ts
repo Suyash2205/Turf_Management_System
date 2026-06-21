@@ -47,24 +47,33 @@ function parseSenderFromText(text: string): string | null {
 }
 
 export async function extractPaymentFromImage(
-  imageBuffer: Buffer
+  imageBuffer: Buffer,
+  timeoutMs = 8000
 ): Promise<OcrResult> {
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("eng");
+  const ocrPromise = (async () => {
+    const { createWorker } = await import("tesseract.js");
+    const worker = await createWorker("eng");
 
-  try {
-    const {
-      data: { text },
-    } = await worker.recognize(imageBuffer);
+    try {
+      const {
+        data: { text },
+      } = await worker.recognize(imageBuffer);
 
-    return {
-      senderName: parseSenderFromText(text),
-      amount: parseAmountFromText(text),
-      rawText: text,
-    };
-  } finally {
-    await worker.terminate();
-  }
+      return {
+        senderName: parseSenderFromText(text),
+        amount: parseAmountFromText(text),
+        rawText: text,
+      };
+    } finally {
+      await worker.terminate();
+    }
+  })();
+
+  const timeoutPromise = new Promise<OcrResult>((_, reject) => {
+    setTimeout(() => reject(new Error("OCR timeout")), timeoutMs);
+  });
+
+  return Promise.race([ocrPromise, timeoutPromise]);
 }
 
 export function normalizeName(name: string): string {
