@@ -88,16 +88,44 @@ function isBookingIdLine(line: string): boolean {
   );
 }
 
+function isTemplatePlaceholder(value: string | undefined): boolean {
+  if (!value?.trim()) return true;
+  const v = value.trim();
+  return /^\$[a-zA-Z][\w]*$/.test(v) || /^\$\{[^}]+\}$/.test(v);
+}
+
+function cleanParsedField(value: string | undefined): string {
+  if (!value || isTemplatePlaceholder(value)) return "";
+  return value.trim();
+}
+
 function parseUserDetails(text: string) {
   const nameMatch = text.match(/Name:\s*([^\n]+)/i);
-  const phoneMatch = text.match(/Mobile No\.?\s*:\s*(\+?\d[\d\s-]{8,14})/i);
-  const emailMatch = text.match(/Email ID:\s*(\S+@\S+)/i);
+  const phoneMatch = text.match(/Mobile No\.?\s*:\s*([^\n]+)/i);
+  const emailMatch = text.match(/Email ID:\s*(\S+)/i);
   const bookedByMatch = text.match(/Booked by\s+([^\n•]+)/i);
 
+  let customerName =
+    cleanParsedField(nameMatch?.[1]) || cleanParsedField(bookedByMatch?.[1]);
+
+  const rawPhone = cleanParsedField(phoneMatch?.[1]);
+  const customerPhone = rawPhone?.replace(/\s/g, "");
+
+  let customerEmail = emailMatch?.[1]?.trim();
+  if (customerEmail && isTemplatePlaceholder(customerEmail)) {
+    customerEmail = undefined;
+  } else if (customerEmail && !customerEmail.includes("@")) {
+    customerEmail = undefined;
+  }
+
+  if (!customerName && customerPhone) {
+    customerName = `Guest (${customerPhone})`;
+  }
+
   return {
-    customerName: (nameMatch?.[1] || bookedByMatch?.[1] || "").trim(),
-    customerPhone: phoneMatch?.[1]?.replace(/\s/g, ""),
-    customerEmail: emailMatch?.[1]?.trim(),
+    customerName,
+    customerPhone: customerPhone || undefined,
+    customerEmail,
   };
 }
 
@@ -286,6 +314,12 @@ export function parseKhelomoreEmail(
   const { bookingDate, slots } = parseSlots(text);
   const bill = parseBillDetails(text);
   const externalId = parseBookingId(subject, text);
+
+  if (!user.customerName) {
+    user.customerName = externalId
+      ? `Guest (${externalId.split("-").pop()})`
+      : "Guest booking";
+  }
 
   if (!user.customerName || !bookingDate) return null;
 
