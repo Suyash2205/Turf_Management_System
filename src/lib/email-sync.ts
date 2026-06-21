@@ -6,7 +6,7 @@ import {
   matchesVenueFilter,
   parseKhelomoreEmail,
 } from "@/lib/email-parser";
-import { BookingPaymentStatus } from "@/generated/prisma/client";
+import { BookingPaymentStatus } from "@prisma/client";
 
 function getSyncSinceDate(): Date {
   const daysBack = parseInt(process.env.EMAIL_SYNC_LOOKBACK_DAYS || "30", 10);

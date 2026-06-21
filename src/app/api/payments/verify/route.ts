@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { VerificationStatus } from "@/generated/prisma/client";
+import { VerificationStatus } from "@prisma/client";
 
 export async function PATCH(request: Request) {
   const session = await auth();

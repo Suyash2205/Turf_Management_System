@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 import { prisma } from "@/lib/db";
 import { amountsMatch, namesMatch } from "@/lib/ocr";
-import { MatchStatus, VerificationStatus } from "@/generated/prisma/client";
+import { MatchStatus, VerificationStatus } from "@prisma/client";
 import { toNumber } from "@/lib/bookings";
 
 export interface ParsedBankRow {

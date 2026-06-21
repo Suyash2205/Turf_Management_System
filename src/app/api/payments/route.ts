@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { recalculateBookingStatus } from "@/lib/bookings";
 import { extractPaymentFromImage } from "@/lib/ocr";
-import { PaymentMethod, VerificationStatus } from "@/generated/prisma/client";
+import { PaymentMethod, VerificationStatus } from "@prisma/client";
 
 export async function POST(request: Request) {
   const session = await auth();

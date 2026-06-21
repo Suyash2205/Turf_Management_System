@@ -5,7 +5,7 @@ import {
   VerificationStatus,
   type Booking,
   type Payment,
-} from "@/generated/prisma/client";
+} from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 
 export function toNumber(value: Decimal | number | string | null | undefined) {
