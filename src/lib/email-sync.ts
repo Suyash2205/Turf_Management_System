@@ -9,24 +9,29 @@ import {
 import { BookingPaymentStatus } from "@prisma/client";
 
 export interface SyncOptions {
-  /** Start of window: days ago from today (e.g. 30 = 30 days back) */
   fromDaysAgo?: number;
-  /** End of window: days ago from today (e.g. 0 = today). Default 0 */
   toDaysAgo?: number;
+}
+
+function formatGmailDate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}/${m}/${d}`;
 }
 
 function getSyncWindow(fullSync: boolean, options?: SyncOptions) {
   if (options?.fromDaysAgo != null) {
-    const from = new Date();
-    from.setDate(from.getDate() - options.fromDaysAgo);
-    from.setHours(0, 0, 0, 0);
+    const since = new Date();
+    since.setDate(since.getDate() - options.fromDaysAgo);
+    since.setHours(0, 0, 0, 0);
 
     const toDays = options.toDaysAgo ?? 0;
-    const to = new Date();
-    to.setDate(to.getDate() - toDays);
-    to.setHours(23, 59, 59, 999);
+    const before = new Date();
+    before.setDate(before.getDate() - toDays);
+    before.setHours(0, 0, 0, 0);
 
-    return { since: from, before: toDays > 0 ? to : undefined };
+    return { since, before: toDays > 0 ? before : undefined };
   }
 
   const daysBack = parseInt(process.env.EMAIL_SYNC_LOOKBACK_DAYS || "30", 10);
@@ -47,6 +52,28 @@ function getSyncWindow(fullSync: boolean, options?: SyncOptions) {
   const since = new Date();
   since.setDate(since.getDate() - daysBack);
   return { since, before: undefined };
+}
+
+async function searchKhelomoreUids(
+  client: ImapFlow,
+  since: Date,
+  before: Date | undefined,
+  imapHost: string
+): Promise<number[]> {
+  if (imapHost.includes("gmail")) {
+    let query = `from:info@khelomore.com after:${formatGmailDate(since)}`;
+    if (before) query += ` before:${formatGmailDate(before)}`;
+    const uids = await client.search({ gmailraw: query }, { uid: true });
+    return uids || [];
+  }
+
+  const searchQuery: Record<string, unknown> = {
+    since,
+    from: "info@khelomore.com",
+  };
+  if (before) searchQuery.before = before;
+  const uids = await client.search(searchQuery, { uid: true });
+  return uids || [];
 }
 
 export async function syncBookingsFromEmail(
@@ -88,15 +115,9 @@ export async function syncBookingsFromEmail(
     const lock = await client.getMailboxLock("INBOX");
 
     try {
-      // Only search Khelomore emails — avoids downloading entire inbox
-      const searchQuery: Record<string, unknown> = {
-        since,
-        from: "info@khelomore.com",
-      };
-      if (before) searchQuery.before = before;
+      const uids = await searchKhelomoreUids(client, since, before, host);
 
-      const uids = await client.search(searchQuery, { uid: true });
-      if (!uids || uids.length === 0) {
+      if (uids.length === 0) {
         return {
           emailsFound: 0,
           bookingsCreated: 0,

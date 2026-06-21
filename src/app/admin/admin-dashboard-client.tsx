@@ -68,6 +68,33 @@ export function AdminDashboardClient() {
     setLoading(false);
   }
 
+  async function parseSyncResponse(res: Response) {
+    const text = await res.text();
+    try {
+      const json = JSON.parse(text);
+      if (!res.ok) {
+        throw new Error(json.error || `Server error (${res.status})`);
+      }
+      return json;
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("Server error")) throw e;
+      const preview = text.replace(/\s+/g, " ").slice(0, 80);
+      throw new Error(
+        res.status === 504 || text.includes("An error")
+          ? `Request timed out (batch too slow). ${preview}`
+          : `Bad response: ${preview}`
+      );
+    }
+  }
+
+  async function runBatch(fromDays: number, toDays: number, label: string) {
+    const res = await fetch(
+      `/api/email/sync?full=true&fromDays=${fromDays}&toDays=${toDays}`,
+      { method: "POST" }
+    );
+    return parseSyncResponse(res);
+  }
+
   async function syncEmails(full = false) {
     setSyncing(true);
     setSyncResult("");
@@ -75,8 +102,7 @@ export function AdminDashboardClient() {
     try {
       if (!full) {
         const res = await fetch("/api/email/sync", { method: "POST" });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || "Sync failed");
+        const json = await parseSyncResponse(res);
         setSyncResult(
           `Sync: ${json.bookingsCreated} new bookings from ${json.emailsFound} Khelomore emails` +
             (json.emailsSkipped ? ` (${json.emailsSkipped} skipped — other venues)` : "")
@@ -85,30 +111,42 @@ export function AdminDashboardClient() {
         return;
       }
 
-      // Full sync in weekly batches to avoid Vercel timeout (10s limit on free plan)
-      const weeks = 5; // 5 × 6 days = 30 days
-      const daysPerWeek = 6;
+      // 10 × 3-day batches to stay under Vercel 10s timeout
+      const batches = 10;
+      const daysPerBatch = 3;
       let totalFound = 0;
       let totalCreated = 0;
+      const failed: string[] = [];
 
-      for (let w = 0; w < weeks; w++) {
-        const fromDays = (w + 1) * daysPerWeek;
-        const toDays = w * daysPerWeek;
-        setSyncResult(`Syncing days ${toDays}–${fromDays} ago… (batch ${w + 1}/${weeks})`);
+      for (let b = 0; b < batches; b++) {
+        const fromDays = (b + 1) * daysPerBatch;
+        const toDays = b * daysPerBatch;
+        setSyncResult(`Syncing days ${toDays}–${fromDays} ago… (${b + 1}/${batches})`);
 
-        const res = await fetch(
-          `/api/email/sync?full=true&fromDays=${fromDays}&toDays=${toDays}`,
-          { method: "POST" }
-        );
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || `Batch ${w + 1} failed`);
-
-        totalFound += json.emailsFound ?? 0;
-        totalCreated += json.bookingsCreated ?? 0;
+        try {
+          const json = await runBatch(fromDays, toDays, `${b + 1}`);
+          totalFound += json.emailsFound ?? 0;
+          totalCreated += json.bookingsCreated ?? 0;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Batch failed";
+          failed.push(`batch ${b + 1}: ${msg}`);
+          // Retry once after a short pause
+          setSyncResult(`Retrying batch ${b + 1}…`);
+          await new Promise((r) => setTimeout(r, 1500));
+          try {
+            const json = await runBatch(fromDays, toDays, `${b + 1} retry`);
+            totalFound += json.emailsFound ?? 0;
+            totalCreated += json.bookingsCreated ?? 0;
+          } catch {
+            // continue with remaining batches
+          }
+        }
       }
 
+      const failNote =
+        failed.length > 0 ? ` Some batches failed: ${failed.join("; ")}` : "";
       setSyncResult(
-        `Full sync done: ${totalCreated} new bookings from ${totalFound} Khelomore emails (last 30 days)`
+        `Full sync done: ${totalCreated} new bookings from ${totalFound} emails (30 days).${failNote}`
       );
       loadDashboard();
     } catch (err) {
