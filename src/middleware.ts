@@ -6,9 +6,9 @@ export default NextAuth(authConfig).auth;
 export const config = {
   matcher: [
     /*
-     * Run auth on all routes except static assets and auth API.
-     * Without this, CSS/JS get redirected to /login and the UI breaks.
+     * Protect page routes only. API routes handle their own auth.
+     * Also exclude static assets so CSS/JS are not redirected to /login.
      */
-    "/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
