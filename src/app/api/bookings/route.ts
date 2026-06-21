@@ -13,6 +13,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get("date");
   const status = searchParams.get("status");
+  const verifyPending = searchParams.get("verify") === "pending";
 
   const where: Record<string, unknown> = {};
 
@@ -26,6 +27,10 @@ export async function GET(request: Request) {
 
   if (status) {
     where.paymentStatus = status;
+  }
+
+  if (verifyPending) {
+    where.payments = { some: { verificationStatus: "PENDING" } };
   }
 
   const bookings = await prisma.booking.findMany({

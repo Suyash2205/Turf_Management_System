@@ -21,9 +21,8 @@ export function AppNav({ role, userName }: NavProps) {
 
   const adminLinks = [
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/admin/verification", label: "Verification", icon: ShieldCheck },
     { href: "/admin/statements", label: "Bank Statements", icon: ClipboardList },
-    { href: "/admin/bookings", label: "Bookings", icon: ClipboardList },
+    { href: "/admin/bookings", label: "Bookings", icon: ShieldCheck },
   ];
 
   const links = role === "ADMIN" ? adminLinks : staffLinks;

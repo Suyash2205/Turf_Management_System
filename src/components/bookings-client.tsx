@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ShieldCheck } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { paymentStatusBadge } from "@/components/ui/badge";
+import { Badge, paymentStatusBadge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface Booking {
@@ -23,18 +24,27 @@ interface Booking {
   pendingAmount: number;
   paymentStatus: string;
   paidOnKhelomore: boolean;
+  pendingVerificationCount?: number;
 }
 
-export function BookingsClient() {
+export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" }) {
+  const searchParams = useSearchParams();
+  const isAdmin = mode === "admin";
+
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [statusFilter, setStatusFilter] = useState("");
+  const [verifyFilter, setVerifyFilter] = useState(
+    searchParams.get("verify") === "pending"
+  );
 
   async function loadBookings() {
     setLoading(true);
-    const params = new URLSearchParams({ date });
+    const params = new URLSearchParams();
+    if (!verifyFilter) params.set("date", date);
     if (statusFilter) params.set("status", statusFilter);
+    if (verifyFilter) params.set("verify", "pending");
     const res = await fetch(`/api/bookings?${params}`);
     const data = await res.json();
     setBookings(data);
@@ -43,14 +53,24 @@ export function BookingsClient() {
 
   useEffect(() => {
     loadBookings();
-  }, [date, statusFilter]);
+  }, [date, statusFilter, verifyFilter]);
+
+  function bookingHref(id: string) {
+    return isAdmin ? `/admin/bookings/${id}` : `/staff/bookings/${id}`;
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Today&apos;s Bookings</h1>
-          <p className="text-sm text-slate-500">Collect and record payments</p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {isAdmin ? "Bookings" : "Today\u2019s Bookings"}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {isAdmin
+              ? "View bookings and verify payments"
+              : "Collect and record payments"}
+          </p>
         </div>
         <Button variant="outline" onClick={loadBookings} disabled={loading}>
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -59,12 +79,14 @@ export function BookingsClient() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-auto"
-        />
+        {!verifyFilter && (
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-auto"
+          />
+        )}
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -75,6 +97,20 @@ export function BookingsClient() {
           <option value="PARTIAL">Partial</option>
           <option value="COMPLETED">Completed</option>
         </select>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setVerifyFilter((v) => !v)}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              verifyFilter
+                ? "border-purple-500 bg-purple-50 text-purple-700"
+                : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Needs verification
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -82,61 +118,80 @@ export function BookingsClient() {
       ) : bookings.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-slate-500">
-            No bookings found for this date.
+            {verifyFilter
+              ? "No bookings pending verification."
+              : "No bookings found for this date."}
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3">
-          {bookings.map((booking, index) => (
-            <Link key={booking.id} href={`/staff/bookings/${booking.id}`}>
-              <Card className="transition-shadow hover:shadow-md">
-                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
-                      {index + 1}
-                    </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-slate-900">
-                          {booking.customerName}
-                        </h3>
-                        {paymentStatusBadge(booking.paymentStatus)}
-                        {booking.paidOnKhelomore && (
-                          <span className="text-xs text-emerald-600">Khelomore paid</span>
+          {bookings.map((booking, index) => {
+            const needsVerify = (booking.pendingVerificationCount ?? 0) > 0;
+            return (
+              <Link key={booking.id} href={bookingHref(booking.id)}>
+                <Card className="transition-shadow hover:shadow-md">
+                  <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-slate-900">
+                            {booking.customerName}
+                          </h3>
+                          {paymentStatusBadge(booking.paymentStatus)}
+                          {booking.paidOnKhelomore && (
+                            <span className="text-xs text-emerald-600">
+                              Khelomore paid
+                            </span>
+                          )}
+                          {needsVerify && (
+                            <Badge variant="warning">
+                              {booking.pendingVerificationCount} to verify
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-500">
+                          {formatDate(booking.bookingDate)}
+                          {booking.startTime && ` · ${booking.startTime}`}
+                          {booking.endTime && ` - ${booking.endTime}`}
+                        </p>
+                        {booking.turfName && (
+                          <p className="text-xs text-slate-400">{booking.turfName}</p>
+                        )}
+                        {booking.customerPhone && (
+                          <p className="text-sm text-slate-500">
+                            {booking.customerPhone}
+                          </p>
+                        )}
+                        {isAdmin && needsVerify && (
+                          <p className="mt-1 text-xs font-medium text-purple-600">
+                            Tap to verify payment →
+                          </p>
                         )}
                       </div>
-                      <p className="text-sm text-slate-500">
-                        {formatDate(booking.bookingDate)}
-                        {booking.startTime && ` · ${booking.startTime}`}
-                        {booking.endTime && ` - ${booking.endTime}`}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-slate-900">
+                        {formatCurrency(booking.totalAmount)}
                       </p>
-                      {booking.turfName && (
-                        <p className="text-xs text-slate-400">{booking.turfName}</p>
+                      {booking.pendingAmount > 0 && (
+                        <p className="text-sm text-amber-600">
+                          Pending: {formatCurrency(booking.pendingAmount)}
+                        </p>
                       )}
-                      {booking.customerPhone && (
-                        <p className="text-sm text-slate-500">{booking.customerPhone}</p>
+                      {booking.paidAmount > 0 && (
+                        <p className="text-sm text-emerald-600">
+                          Collected: {formatCurrency(booking.paidAmount)}
+                        </p>
                       )}
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-bold text-slate-900">
-                      {formatCurrency(booking.totalAmount)}
-                    </p>
-                    {booking.pendingAmount > 0 && (
-                      <p className="text-sm text-amber-600">
-                        Pending: {formatCurrency(booking.pendingAmount)}
-                      </p>
-                    )}
-                    {booking.paidAmount > 0 && (
-                      <p className="text-sm text-emerald-600">
-                        Collected: {formatCurrency(booking.paidAmount)}
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

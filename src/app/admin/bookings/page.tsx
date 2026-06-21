@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { AppNav } from "@/components/app-nav";
 import { BookingsClient } from "@/components/bookings-client";
 
@@ -12,7 +13,9 @@ export default async function AdminBookingsPage() {
     <div className="min-h-screen bg-slate-50">
       <AppNav role={session.user.role} userName={session.user.name} />
       <main className="mx-auto max-w-6xl px-4 py-6">
-        <BookingsClient />
+        <Suspense fallback={<p className="text-slate-500">Loading bookings...</p>}>
+          <BookingsClient mode="admin" />
+        </Suspense>
       </main>
     </div>
   );

@@ -60,6 +60,9 @@ export type BookingWithPayments = Booking & { payments: Payment[] };
 export function serializeBooking(booking: BookingWithPayments) {
   const paid = getPaidAmount(booking.payments);
   const total = toNumber(booking.totalAmount);
+  const pendingVerificationCount = booking.payments.filter(
+    (p) => p.verificationStatus === VerificationStatus.PENDING
+  ).length;
   return {
     ...booking,
     bookingDate: booking.bookingDate.toISOString(),
@@ -68,6 +71,7 @@ export function serializeBooking(booking: BookingWithPayments) {
     totalAmount: total,
     paidAmount: paid,
     pendingAmount: Math.max(0, total - paid),
+    pendingVerificationCount,
     payments: booking.payments.map((p) => ({
       ...p,
       amount: toNumber(p.amount),
