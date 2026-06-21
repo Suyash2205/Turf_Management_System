@@ -10,7 +10,7 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "admin@turfpay.com" },
-    update: {},
+    update: { password: adminPassword, name: "Admin", role: "ADMIN" },
     create: {
       email: "admin@turfpay.com",
       password: adminPassword,
@@ -21,7 +21,7 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "staff@turfpay.com" },
-    update: {},
+    update: { password: staffPassword, name: "Ground Staff", role: "STAFF" },
     create: {
       email: "staff@turfpay.com",
       password: staffPassword,
