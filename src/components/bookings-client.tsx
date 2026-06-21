@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { RefreshCw } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { paymentStatusBadge } from "@/components/ui/badge";
@@ -25,7 +25,7 @@ interface Booking {
   paidOnKhelomore: boolean;
 }
 
-export function StaffBookingsClient() {
+export function BookingsClient() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -87,31 +87,36 @@ export function StaffBookingsClient() {
         </Card>
       ) : (
         <div className="grid gap-3">
-          {bookings.map((booking) => (
+          {bookings.map((booking, index) => (
             <Link key={booking.id} href={`/staff/bookings/${booking.id}`}>
               <Card className="transition-shadow hover:shadow-md">
                 <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-slate-900">
-                        {booking.customerName}
-                      </h3>
-                      {paymentStatusBadge(booking.paymentStatus)}
-                      {booking.paidOnKhelomore && (
-                        <span className="text-xs text-emerald-600">Khelomore paid</span>
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
+                      {index + 1}
+                    </span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-slate-900">
+                          {booking.customerName}
+                        </h3>
+                        {paymentStatusBadge(booking.paymentStatus)}
+                        {booking.paidOnKhelomore && (
+                          <span className="text-xs text-emerald-600">Khelomore paid</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-500">
+                        {formatDate(booking.bookingDate)}
+                        {booking.startTime && ` · ${booking.startTime}`}
+                        {booking.endTime && ` - ${booking.endTime}`}
+                      </p>
+                      {booking.turfName && (
+                        <p className="text-xs text-slate-400">{booking.turfName}</p>
+                      )}
+                      {booking.customerPhone && (
+                        <p className="text-sm text-slate-500">{booking.customerPhone}</p>
                       )}
                     </div>
-                    <p className="text-sm text-slate-500">
-                      {formatDate(booking.bookingDate)}
-                      {booking.startTime && ` · ${booking.startTime}`}
-                      {booking.endTime && ` - ${booking.endTime}`}
-                    </p>
-                    {(booking.turfName) && (
-                      <p className="text-xs text-slate-400">{booking.turfName}</p>
-                    )}
-                    {booking.customerPhone && (
-                      <p className="text-sm text-slate-500">{booking.customerPhone}</p>
-                    )}
                   </div>
                   <div className="text-right">
                     <p className="text-lg font-bold text-slate-900">

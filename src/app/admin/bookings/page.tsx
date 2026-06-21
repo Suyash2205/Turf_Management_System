@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import { AppNav } from "@/components/app-nav";
 import { BookingsClient } from "@/components/bookings-client";
 
-export default async function StaffPage() {
+export default async function AdminBookingsPage() {
   const session = await auth();
   if (!session) redirect("/login");
+  if (session.user.role !== "ADMIN") redirect("/staff");
 
   return (
     <div className="min-h-screen bg-slate-50">
