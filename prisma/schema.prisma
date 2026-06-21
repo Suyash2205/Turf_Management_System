@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STAFF
+  ADMIN
+}
+
+enum PaymentMethod {
+  CASH
+  ONLINE
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum BookingPaymentStatus {
+  PENDING
+  PARTIAL
+  COMPLETED
+}
+
+enum MatchStatus {
+  UNMATCHED
+  MATCHED
+  MANUAL
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(STAFF)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  recordedPayments Payment[]       @relation("RecordedBy")
+  bankStatements BankStatement[] @relation("UploadedBy")
+}
+
+model Booking {
+  id              String               @id @default(cuid())
+  externalId      String?              @unique
+  customerName    String
+  customerPhone   String?
+  customerEmail   String?
+  venueName       String?
+  turfName        String?
+  location        String?
+  bookingDate     DateTime
+  startTime       String?
+  endTime         String?
+  totalAmount     Decimal              @db.Decimal(10, 2)
+  slotPrice       Decimal?             @db.Decimal(10, 2)
+  couponAmount    Decimal?             @db.Decimal(10, 2)
+  paidOnKhelomore Boolean              @default(false)
+  paymentStatus   BookingPaymentStatus @default(PENDING)
+  emailMessageId  String?              @unique
+  rawEmailSubject String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  payments Payment[]
+}
+
+model Payment {
+  id                  String             @id @default(cuid())
+  bookingId           String
+  amount              Decimal            @db.Decimal(10, 2)
+  method              PaymentMethod
+  proofImageUrl       String?
+  extractedSenderName String?
+  extractedAmount     Decimal?           @db.Decimal(10, 2)
+  verificationStatus  VerificationStatus @default(PENDING)
+  verifiedAt          DateTime?
+  verifiedById        String?
+  notes               String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  booking            Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  recordedBy         User?              @relation("RecordedBy", fields: [recordedById], references: [id])
+  recordedById       String?
+  bankTransaction    BankTransaction?
+
+  @@index([bookingId])
+  @@index([verificationStatus])
+}
+
+model BankStatement {
+  id           String   @id @default(cuid())
+  fileName     String
+  fileUrl      String
+  statementDate DateTime?
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  uploadedBy   User              @relation("UploadedBy", fields: [uploadedById], references: [id])
+  transactions BankTransaction[]
+}
+
+model BankTransaction {
+  id              String      @id @default(cuid())
+  statementId     String
+  transactionDate DateTime?
+  description     String
+  amount          Decimal     @db.Decimal(10, 2)
+  senderName      String?
+  matchStatus     MatchStatus @default(UNMATCHED)
+  matchedPaymentId String?    @unique
+  createdAt       DateTime    @default(now())
+
+  statement      BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  matchedPayment Payment?      @relation(fields: [matchedPaymentId], references: [id])
+
+  @@index([statementId])
+  @@index([matchStatus])
+}
+
+model EmailSyncLog {
+  id           String   @id @default(cuid())
+  syncedAt     DateTime @default(now())
+  emailsFound  Int      @default(0)
+  bookingsCreated Int   @default(0)
+  errors       String?
+}

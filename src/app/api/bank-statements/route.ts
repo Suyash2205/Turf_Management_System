@@ -1,0 +1,72 @@
+import { NextResponse } from "next/server";
+import { put } from "@vercel/blob";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { parseBankStatementCsv, matchBankTransactions } from "@/lib/bank-matcher";
+
+export async function GET() {
+  const session = await auth();
+  if (!session || session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const statements = await prisma.bankStatement.findMany({
+    include: {
+      uploadedBy: { select: { name: true } },
+      _count: { select: { transactions: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return NextResponse.json(statements);
+}
+
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session || session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const formData = await request.formData();
+  const file = formData.get("file") as File;
+  const statementDate = formData.get("statementDate") as string | null;
+
+  if (!file) {
+    return NextResponse.json({ error: "No file" }, { status: 400 });
+  }
+
+  const content = await file.text();
+  const rows = parseBankStatementCsv(content);
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const blob = await put(`bank-statements/${Date.now()}-${file.name}`, buffer, {
+    access: "public",
+    contentType: file.type || "text/csv",
+  });
+
+  const statement = await prisma.bankStatement.create({
+    data: {
+      fileName: file.name,
+      fileUrl: blob.url,
+      statementDate: statementDate ? new Date(statementDate) : null,
+      uploadedById: session.user.id,
+      transactions: {
+        create: rows.map((row) => ({
+          transactionDate: row.transactionDate,
+          description: row.description,
+          amount: row.amount,
+          senderName: row.senderName,
+        })),
+      },
+    },
+    include: { transactions: true },
+  });
+
+  const matched = await matchBankTransactions(statement.id);
+
+  return NextResponse.json({
+    statement,
+    transactionsParsed: rows.length,
+    autoMatched: matched,
+  });
+}
