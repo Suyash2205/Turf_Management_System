@@ -71,20 +71,50 @@ export function AdminDashboardClient() {
   async function syncEmails(full = false) {
     setSyncing(true);
     setSyncResult("");
-    const res = await fetch(
-      `/api/email/sync${full ? "?full=true" : ""}`,
-      { method: "POST" }
-    );
-    const json = await res.json();
-    setSyncing(false);
-    if (res.ok) {
+
+    try {
+      if (!full) {
+        const res = await fetch("/api/email/sync", { method: "POST" });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Sync failed");
+        setSyncResult(
+          `Sync: ${json.bookingsCreated} new bookings from ${json.emailsFound} Khelomore emails` +
+            (json.emailsSkipped ? ` (${json.emailsSkipped} skipped — other venues)` : "")
+        );
+        loadDashboard();
+        return;
+      }
+
+      // Full sync in weekly batches to avoid Vercel timeout (10s limit on free plan)
+      const weeks = 5; // 5 × 6 days = 30 days
+      const daysPerWeek = 6;
+      let totalFound = 0;
+      let totalCreated = 0;
+
+      for (let w = 0; w < weeks; w++) {
+        const fromDays = (w + 1) * daysPerWeek;
+        const toDays = w * daysPerWeek;
+        setSyncResult(`Syncing days ${toDays}–${fromDays} ago… (batch ${w + 1}/${weeks})`);
+
+        const res = await fetch(
+          `/api/email/sync?full=true&fromDays=${fromDays}&toDays=${toDays}`,
+          { method: "POST" }
+        );
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || `Batch ${w + 1} failed`);
+
+        totalFound += json.emailsFound ?? 0;
+        totalCreated += json.bookingsCreated ?? 0;
+      }
+
       setSyncResult(
-        `${full ? "Full sync" : "Sync"}: ${json.bookingsCreated} new bookings from ${json.emailsFound} Khelomore emails` +
-          (json.emailsSkipped ? ` (${json.emailsSkipped} skipped — other venues)` : "")
+        `Full sync done: ${totalCreated} new bookings from ${totalFound} Khelomore emails (last 30 days)`
       );
       loadDashboard();
-    } else {
-      setSyncResult(json.error || "Sync failed");
+    } catch (err) {
+      setSyncResult(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncing(false);
     }
   }
 

@@ -8,29 +8,51 @@ import {
 } from "@/lib/email-parser";
 import { BookingPaymentStatus } from "@prisma/client";
 
-function getSyncSinceDate(fullSync = false): Date {
+export interface SyncOptions {
+  /** Start of window: days ago from today (e.g. 30 = 30 days back) */
+  fromDaysAgo?: number;
+  /** End of window: days ago from today (e.g. 0 = today). Default 0 */
+  toDaysAgo?: number;
+}
+
+function getSyncWindow(fullSync: boolean, options?: SyncOptions) {
+  if (options?.fromDaysAgo != null) {
+    const from = new Date();
+    from.setDate(from.getDate() - options.fromDaysAgo);
+    from.setHours(0, 0, 0, 0);
+
+    const toDays = options.toDaysAgo ?? 0;
+    const to = new Date();
+    to.setDate(to.getDate() - toDays);
+    to.setHours(23, 59, 59, 999);
+
+    return { since: from, before: toDays > 0 ? to : undefined };
+  }
+
   const daysBack = parseInt(process.env.EMAIL_SYNC_LOOKBACK_DAYS || "30", 10);
 
   if (fullSync) {
     const since = new Date();
     since.setDate(since.getDate() - daysBack);
-    return since;
+    return { since, before: undefined };
   }
 
-  // When polling frequently, only scan recent mail (much faster)
   if (process.env.EMAIL_SYNC_MODE === "poll") {
     const pollDays = parseInt(process.env.EMAIL_SYNC_POLL_DAYS || "2", 10);
     const since = new Date();
     since.setDate(since.getDate() - pollDays);
-    return since;
+    return { since, before: undefined };
   }
 
   const since = new Date();
   since.setDate(since.getDate() - daysBack);
-  return since;
+  return { since, before: undefined };
 }
 
-export async function syncBookingsFromEmail(fullSync = false) {
+export async function syncBookingsFromEmail(
+  fullSync = false,
+  options?: SyncOptions
+) {
   const host = process.env.EMAIL_IMAP_HOST;
   const user = process.env.EMAIL_IMAP_USER;
   const pass = process.env.EMAIL_IMAP_PASSWORD;
@@ -59,16 +81,36 @@ export async function syncBookingsFromEmail(fullSync = false) {
   let bookingsCreated = 0;
   let emailsSkipped = 0;
   const errors: string[] = [];
-  const since = getSyncSinceDate(fullSync);
+  const { since, before } = getSyncWindow(fullSync, options);
 
   try {
     await client.connect();
     const lock = await client.getMailboxLock("INBOX");
 
     try {
+      // Only search Khelomore emails — avoids downloading entire inbox
+      const searchQuery: Record<string, unknown> = {
+        since,
+        from: "info@khelomore.com",
+      };
+      if (before) searchQuery.before = before;
+
+      const uids = await client.search(searchQuery, { uid: true });
+      if (!uids || uids.length === 0) {
+        return {
+          emailsFound: 0,
+          bookingsCreated: 0,
+          emailsSkipped: 0,
+          errors: [],
+          fullSync,
+          window: { since, before },
+        };
+      }
+
       for await (const message of client.fetch(
-        { since },
-        { source: true, envelope: true }
+        uids,
+        { source: true, envelope: true },
+        { uid: true }
       )) {
         const from = message.envelope?.from?.[0]?.address || "";
         const subject = message.envelope?.subject || "";
@@ -79,7 +121,7 @@ export async function syncBookingsFromEmail(fullSync = false) {
 
         const parsedEmail = await simpleParser(message.source!);
         const body = parsedEmail.html || parsedEmail.text || "";
-        const messageId = parsedEmail.messageId || message.uid.toString();
+        const messageId = parsedEmail.messageId || message.uid!.toString();
 
         const existing = await prisma.booking.findUnique({
           where: { emailMessageId: messageId },
@@ -88,7 +130,7 @@ export async function syncBookingsFromEmail(fullSync = false) {
 
         const bookingData = parseKhelomoreEmail(subject, body);
         if (!bookingData) {
-          errors.push(`Could not parse email: ${subject}`);
+          errors.push(`Could not parse: ${subject.slice(0, 60)}`);
           continue;
         }
 
@@ -141,12 +183,19 @@ export async function syncBookingsFromEmail(fullSync = false) {
       emailsFound,
       bookingsCreated,
       errors: errors.length
-        ? [...errors, `Skipped ${emailsSkipped} emails for other venues`].join("; ")
+        ? [...errors, `Skipped ${emailsSkipped} other venues`].join("; ")
         : emailsSkipped > 0
-          ? `Skipped ${emailsSkipped} emails for other venues`
+          ? `Skipped ${emailsSkipped} other venues`
           : null,
     },
   });
 
-  return { emailsFound, bookingsCreated, emailsSkipped, errors, fullSync };
+  return {
+    emailsFound,
+    bookingsCreated,
+    emailsSkipped,
+    errors,
+    fullSync,
+    window: { since, before },
+  };
 }
