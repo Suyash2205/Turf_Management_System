@@ -68,14 +68,20 @@ export function AdminDashboardClient() {
     setLoading(false);
   }
 
-  async function syncEmails() {
+  async function syncEmails(full = false) {
     setSyncing(true);
     setSyncResult("");
-    const res = await fetch("/api/email/sync", { method: "POST" });
+    const res = await fetch(
+      `/api/email/sync${full ? "?full=true" : ""}`,
+      { method: "POST" }
+    );
     const json = await res.json();
     setSyncing(false);
     if (res.ok) {
-      setSyncResult(`Synced: ${json.bookingsCreated} new bookings from ${json.emailsFound} emails`);
+      setSyncResult(
+        `${full ? "Full sync" : "Sync"}: ${json.bookingsCreated} new bookings from ${json.emailsFound} Khelomore emails` +
+          (json.emailsSkipped ? ` (${json.emailsSkipped} skipped — other venues)` : "")
+      );
       loadDashboard();
     } else {
       setSyncResult(json.error || "Sync failed");
@@ -100,14 +106,18 @@ export function AdminDashboardClient() {
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
           <p className="text-sm text-slate-500">Last 30 days overview</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={loadDashboard}>
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button onClick={syncEmails} disabled={syncing}>
+          <Button onClick={() => syncEmails(false)} disabled={syncing}>
             <Mail className="h-4 w-4" />
-            {syncing ? "Syncing..." : "Sync Emails"}
+            {syncing ? "Syncing..." : "Sync Recent"}
+          </Button>
+          <Button variant="secondary" onClick={() => syncEmails(true)} disabled={syncing}>
+            <Mail className="h-4 w-4" />
+            {syncing ? "Syncing..." : "Full Sync (30 days)"}
           </Button>
         </div>
       </div>

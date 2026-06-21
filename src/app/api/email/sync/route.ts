@@ -22,7 +22,9 @@ async function handleSync(request: Request) {
   }
 
   try {
-    const result = await syncBookingsFromEmail();
+    const fullSync =
+      new URL(request.url).searchParams.get("full") === "true";
+    const result = await syncBookingsFromEmail(fullSync);
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(

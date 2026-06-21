@@ -8,8 +8,14 @@ import {
 } from "@/lib/email-parser";
 import { BookingPaymentStatus } from "@prisma/client";
 
-function getSyncSinceDate(): Date {
+function getSyncSinceDate(fullSync = false): Date {
   const daysBack = parseInt(process.env.EMAIL_SYNC_LOOKBACK_DAYS || "30", 10);
+
+  if (fullSync) {
+    const since = new Date();
+    since.setDate(since.getDate() - daysBack);
+    return since;
+  }
 
   // When polling frequently, only scan recent mail (much faster)
   if (process.env.EMAIL_SYNC_MODE === "poll") {
@@ -24,7 +30,7 @@ function getSyncSinceDate(): Date {
   return since;
 }
 
-export async function syncBookingsFromEmail() {
+export async function syncBookingsFromEmail(fullSync = false) {
   const host = process.env.EMAIL_IMAP_HOST;
   const user = process.env.EMAIL_IMAP_USER;
   const pass = process.env.EMAIL_IMAP_PASSWORD;
@@ -53,7 +59,7 @@ export async function syncBookingsFromEmail() {
   let bookingsCreated = 0;
   let emailsSkipped = 0;
   const errors: string[] = [];
-  const since = getSyncSinceDate();
+  const since = getSyncSinceDate(fullSync);
 
   try {
     await client.connect();
@@ -142,5 +148,5 @@ export async function syncBookingsFromEmail() {
     },
   });
 
-  return { emailsFound, bookingsCreated, emailsSkipped, errors };
+  return { emailsFound, bookingsCreated, emailsSkipped, errors, fullSync };
 }
