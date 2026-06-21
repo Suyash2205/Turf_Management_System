@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, ArrowLeft } from "lucide-react";
+import { Camera, Image as ImageIcon, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,8 @@ interface Booking {
 
 export function PaymentEntryClient({ booking }: { booking: Booking }) {
   const router = useRouter();
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<"CASH" | "ONLINE">("CASH");
   const [proofImage, setProofImage] = useState<File | null>(null);
@@ -51,6 +53,14 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
     if (!file) return;
     setProofImage(file);
     setPreview(URL.createObjectURL(file));
+    e.target.value = "";
+  }
+
+  function clearProofImage() {
+    setProofImage(null);
+    setPreview(null);
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -77,8 +87,7 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
 
     setSuccess("Payment recorded successfully!");
     setAmount("");
-    setProofImage(null);
-    setPreview(null);
+    clearProofImage();
     router.refresh();
     window.location.reload();
   }
@@ -170,25 +179,46 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
                   <label className="mb-2 block text-sm font-medium">
                     Payment screenshot
                   </label>
-                  <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-6 hover:border-emerald-400">
-                    <Camera className="h-8 w-8 text-slate-400" />
-                    <span className="text-sm text-slate-500">
-                      Tap to take photo of UPI proof
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="hidden"
-                      onChange={handleImageChange}
-                    />
-                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-4 hover:border-emerald-400">
+                      <Camera className="h-6 w-6 text-slate-400" />
+                      <span className="text-xs text-slate-500">Take photo</span>
+                      <input
+                        ref={cameraInputRef}
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={handleImageChange}
+                      />
+                    </label>
+                    <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-slate-300 p-4 hover:border-emerald-400">
+                      <ImageIcon className="h-6 w-6 text-slate-400" />
+                      <span className="text-xs text-slate-500">From gallery</span>
+                      <input
+                        ref={galleryInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleImageChange}
+                      />
+                    </label>
+                  </div>
                   {preview && (
-                    <img
-                      src={preview}
-                      alt="Payment proof"
-                      className="mt-2 max-h-48 rounded-lg object-contain"
-                    />
+                    <div className="relative mt-2">
+                      <img
+                        src={preview}
+                        alt="Payment proof"
+                        className="max-h-48 rounded-lg object-contain"
+                      />
+                      <button
+                        type="button"
+                        onClick={clearProofImage}
+                        className="mt-2 text-xs text-slate-500 hover:text-slate-700"
+                      >
+                        Remove image
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
