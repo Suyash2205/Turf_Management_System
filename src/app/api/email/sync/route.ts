@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 import { syncBookingsFromEmail } from "@/lib/email-sync";
 
-function isAuthorized(request: Request, session: Awaited<ReturnType<typeof auth>>) {
+function isAuthorized(request: Request, session: Session | null) {
   const cronSecret = request.headers.get("x-cron-secret");
   const querySecret = new URL(request.url).searchParams.get("secret");
   const isCron =
@@ -10,7 +11,7 @@ function isAuthorized(request: Request, session: Awaited<ReturnType<typeof auth>
     querySecret === process.env.CRON_SECRET;
 
   if (isCron) return true;
-  return !!session && session.user.role === "ADMIN";
+  return !!session?.user && session.user.role === "ADMIN";
 }
 
 async function handleSync(request: Request) {
