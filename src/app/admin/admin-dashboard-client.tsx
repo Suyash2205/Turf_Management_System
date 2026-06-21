@@ -80,19 +80,50 @@ export function AdminDashboardClient() {
       if (e instanceof Error && e.message.startsWith("Server error")) throw e;
       const preview = text.replace(/\s+/g, " ").slice(0, 80);
       throw new Error(
-        res.status === 504 || text.includes("An error")
+        res.status === 504 ||
+          text.includes("An error") ||
+          text.includes("FUNCTION_INVOCATION_TIMEOUT")
           ? `Request timed out (batch too slow). ${preview}`
           : `Bad response: ${preview}`
       );
     }
   }
 
-  async function runBatch(fromDays: number, toDays: number, label: string) {
+  async function runBatch(fromDays: number, toDays: number) {
     const res = await fetch(
       `/api/email/sync?full=true&fromDays=${fromDays}&toDays=${toDays}`,
       { method: "POST" }
     );
     return parseSyncResponse(res);
+  }
+
+  async function runBatchRange(
+    fromDays: number,
+    toDays: number,
+    depth = 0
+  ): Promise<{ emailsFound: number; bookingsCreated: number; emailsSkipped: number }> {
+    try {
+      const json = await runBatch(fromDays, toDays);
+      return {
+        emailsFound: json.emailsFound ?? 0,
+        bookingsCreated: json.bookingsCreated ?? 0,
+        emailsSkipped: json.emailsSkipped ?? 0,
+      };
+    } catch (err) {
+      if (fromDays - toDays <= 1 || depth >= 3) throw err;
+      const mid = Math.ceil((fromDays + toDays) / 2);
+      setSyncResult(
+        `Batch timed out — retrying days ${toDays}–${fromDays} in smaller chunks…`
+      );
+      await new Promise((r) => setTimeout(r, 1000));
+      const first = await runBatchRange(fromDays, mid, depth + 1);
+      const second = await runBatchRange(mid, toDays, depth + 1);
+      return {
+        emailsFound: first.emailsFound + second.emailsFound,
+        bookingsCreated: first.bookingsCreated + second.bookingsCreated,
+        emailsSkipped: first.emailsSkipped + second.emailsSkipped,
+      };
+    }
   }
 
   async function syncEmails(full = false) {
@@ -112,47 +143,40 @@ export function AdminDashboardClient() {
         return;
       }
 
-      // 10 × 3-day batches to stay under Vercel 10s timeout
-      const batches = 10;
-      const daysPerBatch = 3;
+      // 30 × 1-day batches; auto-splits on timeout
+      const days = 30;
       let totalFound = 0;
       let totalCreated = 0;
       let totalSkipped = 0;
       const failed: string[] = [];
 
-      for (let b = 0; b < batches; b++) {
-        const fromDays = (b + 1) * daysPerBatch;
-        const toDays = b * daysPerBatch;
-        setSyncResult(`Syncing days ${toDays}–${fromDays} ago… (${b + 1}/${batches})`);
+      for (let d = 0; d < days; d++) {
+        const fromDays = d + 1;
+        const toDays = d;
+        setSyncResult(`Syncing day ${toDays + 1} ago… (${d + 1}/${days})`);
 
         try {
-          const json = await runBatch(fromDays, toDays, `${b + 1}`);
-          totalFound += json.emailsFound ?? 0;
-          totalCreated += json.bookingsCreated ?? 0;
-          totalSkipped += json.emailsSkipped ?? 0;
+          const json = await runBatchRange(fromDays, toDays);
+          totalFound += json.emailsFound;
+          totalCreated += json.bookingsCreated;
+          totalSkipped += json.emailsSkipped;
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Batch failed";
-          failed.push(`batch ${b + 1}: ${msg}`);
-          // Retry once after a short pause
-          setSyncResult(`Retrying batch ${b + 1}…`);
-          await new Promise((r) => setTimeout(r, 1500));
-          try {
-            const json = await runBatch(fromDays, toDays, `${b + 1} retry`);
-            totalFound += json.emailsFound ?? 0;
-            totalCreated += json.bookingsCreated ?? 0;
-            totalSkipped += json.emailsSkipped ?? 0;
-          } catch {
-            // continue with remaining batches
-          }
+          failed.push(`day ${toDays + 1} ago: ${msg}`);
+        }
+
+        if (d < days - 1) {
+          await new Promise((r) => setTimeout(r, 300));
         }
       }
 
       const failNote =
-        failed.length > 0 ? ` Some batches failed: ${failed.join("; ")}` : "";
+        failed.length > 0 ? ` Some days failed: ${failed.join("; ")}.` : "";
       setSyncResult(
-        `Full sync done: ${totalCreated} new bookings from ${totalFound} emails (30 days).` +
-          (totalSkipped ? ` ${totalSkipped} skipped (other venues).` : "") +
-          failNote
+        `Full sync done: ${totalCreated} new bookings from ${totalFound} Lush Sports emails (30 days).` +
+          (totalSkipped ? ` ${totalSkipped} skipped.` : "") +
+          failNote +
+          (failed.length > 0 ? " Re-run Full Sync to retry failed days (duplicates are skipped)." : "")
       );
       loadDashboard();
     } catch (err) {

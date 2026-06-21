@@ -35,6 +35,7 @@ async function handleSync(request: Request) {
         ? {
             fromDaysAgo: parseInt(fromDays, 10),
             toDaysAgo: toDays != null ? parseInt(toDays, 10) : 0,
+            skipLog: true,
           }
         : undefined;
 
