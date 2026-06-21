@@ -32,6 +32,9 @@ const MONTHS: Record<string, number> = {
 
 function normalizeEmailBody(body: string): string {
   return body
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/-->/g, " ")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n")
     .replace(/<\/div>/gi, "\n")
@@ -78,9 +81,16 @@ function parseBookingId(subject: string, text: string): string | null {
   return bodyMatch ? bodyMatch[1] : null;
 }
 
+function isBookingIdLine(line: string): boolean {
+  return (
+    /^(?:ID:\s*)?\d{4}-\d+-[A-Z0-9]+$/i.test(line) ||
+    /^ID:\s*\d{4}-\d+-[A-Z0-9]+$/i.test(line)
+  );
+}
+
 function parseUserDetails(text: string) {
   const nameMatch = text.match(/Name:\s*([^\n]+)/i);
-  const phoneMatch = text.match(/Mobile No\.:\s*(\+?\d[\d\s-]{8,14})/i);
+  const phoneMatch = text.match(/Mobile No\.?\s*:\s*(\+?\d[\d\s-]{8,14})/i);
   const emailMatch = text.match(/Email ID:\s*(\S+@\S+)/i);
   const bookedByMatch = text.match(/Booked by\s+([^\n•]+)/i);
 
@@ -104,8 +114,7 @@ function parseVenueDetails(text: string) {
     .filter(Boolean)
     .filter(
       (line) =>
-        !/^booking details$/i.test(line) &&
-        !/^\d{4}-\d+-[A-Z0-9]+$/i.test(line)
+        !/^booking details$/i.test(line) && !isBookingIdLine(line)
     );
 
   const venueName = lines[0];
@@ -122,46 +131,112 @@ function parseSlots(text: string) {
     /Slot Details([\s\S]*?)(?:Bill Details|Important Instructions|$)/i
   )?.[1];
 
-  if (!section) return { bookingDate: null, slots: [] as Array<{ start: string; end: string; turfName?: string; price?: number }> };
+  if (!section)
+    return {
+      bookingDate: null,
+      slots: [] as Array<{
+        start: string;
+        end: string;
+        turfName?: string;
+        price?: number;
+      }>,
+    };
+
+  const rawLines = section
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const lines: string[] = [];
+  for (const line of rawLines) {
+    if (lines.length && line === lines[lines.length - 1]) continue;
+    lines.push(line);
+  }
 
   const bookingDate = parseKhelomoreDate(
-    section.match(/(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+'?\d{2,4})/i)?.[1] || ""
+    section.match(
+      /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+'?\d{2,4})/i
+    )?.[1] || ""
   );
 
-  const slots: Array<{ start: string; end: string; turfName?: string; price?: number }> = [];
-  const timeMatches = [...section.matchAll(/(\d{2}:\d{2})-(\d{2}:\d{2})/g)];
+  const slots: Array<{
+    start: string;
+    end: string;
+    turfName?: string;
+    price?: number;
+  }> = [];
 
-  for (const match of timeMatches) {
-    const start = match[1];
-    const end = match[2];
-    const after = section.slice(match.index! + match[0].length, match.index! + match[0].length + 120);
-    const turfMatch = after.match(/([A-Za-z][A-Za-z0-9\s.'-]{2,40})/);
-    const priceMatch = after.match(/₹\s*([\d,]+)/);
+  for (let i = 0; i < lines.length; i++) {
+    const timeMatch = lines[i].match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+    if (!timeMatch) continue;
+
+    let turfName: string | undefined;
+    let price: number | undefined;
+
+    for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+      if (/^\d{2}:\d{2}-\d{2}:\d{2}$/.test(lines[j])) break;
+      if (
+        !turfName &&
+        /^[A-Za-z]/.test(lines[j]) &&
+        !/^(Slot|Bill|Important|Pay balance|Share|Check|Any changes)/i.test(
+          lines[j]
+        )
+      ) {
+        turfName = lines[j];
+      }
+      const priceMatch = lines[j].match(/^([\d,]+(?:\.\d{2})?)$/);
+      if (priceMatch && !price) {
+        price = parseFloat(priceMatch[1].replace(/,/g, ""));
+      }
+    }
 
     slots.push({
-      start,
-      end,
-      turfName: turfMatch?.[1]?.trim(),
-      price: priceMatch ? parseFloat(priceMatch[1].replace(/,/g, "")) : undefined,
+      start: timeMatch[1],
+      end: timeMatch[2],
+      turfName,
+      price,
     });
   }
 
   return { bookingDate, slots };
 }
 
-function parseBillDetails(text: string) {
-  const section = text.match(/Bill Details([\s\S]*?)(?:Important Instructions|$)/i)?.[1] || text;
+function extractLabeledAmount(section: string, label: string): number | undefined {
+  const lines = section
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
-  const slotPriceMatch = section.match(/Slot\(s\)\s*Price\s*₹?\s*([\d,]+)/i);
+  for (let i = 0; i < lines.length; i++) {
+    if (!new RegExp(`^${label.replace(/[()]/g, "\\$&")}$`, "i").test(lines[i])) {
+      continue;
+    }
+    for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+      const match = lines[j].match(/^([\d,]+(?:\.\d{2})?)$/);
+      if (match) return parseFloat(match[1].replace(/,/g, ""));
+    }
+  }
+  return undefined;
+}
+
+function parseBillDetails(text: string) {
+  const section =
+    text.match(/Bill Details([\s\S]*?)(?:Important Instructions|$)/i)?.[1] ||
+    text;
+
+  const slotPrice = extractLabeledAmount(section, "Slot(s) Price");
   const couponMatch = section.match(/Coupon[\s\S]*?-₹?\s*([\d,]+)/i);
-  const amountReceivedMatch = section.match(/Amount Received\s*₹?\s*([\d,]+)/i);
+  const amountReceived = extractLabeledAmount(section, "Amount Received");
+  const amountToCollect =
+    extractLabeledAmount(section, "Amount to be Collected") ??
+    extractLabeledAmount(section, "Amount Pending");
 
   return {
-    slotPrice: slotPriceMatch ? parseFloat(slotPriceMatch[1].replace(/,/g, "")) : undefined,
-    couponAmount: couponMatch ? parseFloat(couponMatch[1].replace(/,/g, "")) : undefined,
-    amountReceived: amountReceivedMatch
-      ? parseFloat(amountReceivedMatch[1].replace(/,/g, ""))
+    slotPrice,
+    couponAmount: couponMatch
+      ? parseFloat(couponMatch[1].replace(/,/g, ""))
       : undefined,
+    amountReceived,
+    amountToCollect,
   };
 }
 
@@ -214,13 +289,17 @@ export function parseKhelomoreEmail(
 
   if (!user.customerName || !bookingDate) return null;
 
-  const paidOnKhelomore = /Status:\s*Completed/i.test(text);
+  const amountReceived = bill.amountReceived ?? 0;
+  const slotTotal = slots.reduce((sum, slot) => sum + (slot.price || 0), 0);
   const totalAmount =
-    bill.amountReceived ??
-    bill.slotPrice ??
-    slots.reduce((sum, slot) => sum + (slot.price || 0), 0);
+    amountReceived > 0
+      ? amountReceived
+      : bill.amountToCollect ?? bill.slotPrice ?? slotTotal;
 
   if (!totalAmount || totalAmount <= 0) return null;
+
+  const paidOnKhelomore =
+    amountReceived > 0 && /Status:\s*Completed/i.test(text);
 
   const startTime = slots[0]?.start;
   const endTime = slots.at(-1)?.end;
@@ -270,7 +349,7 @@ Mobile No.: 7400276265
 Email ID: mrkherada@gmail.com
 
 Booking Details
-2026-272-SIDR
+ID: 2026-272-SIDR
 Lush Sports
 Mira Road East Mumbai
 

@@ -105,7 +105,8 @@ export function AdminDashboardClient() {
         const json = await parseSyncResponse(res);
         setSyncResult(
           `Sync: ${json.bookingsCreated} new bookings from ${json.emailsFound} Khelomore emails` +
-            (json.emailsSkipped ? ` (${json.emailsSkipped} skipped — other venues)` : "")
+            (json.emailsSkipped ? ` (${json.emailsSkipped} skipped — other venues)` : "") +
+            (json.errors?.length ? ` (${json.errors.length} parse errors)` : "")
         );
         loadDashboard();
         return;
@@ -116,6 +117,7 @@ export function AdminDashboardClient() {
       const daysPerBatch = 3;
       let totalFound = 0;
       let totalCreated = 0;
+      let totalSkipped = 0;
       const failed: string[] = [];
 
       for (let b = 0; b < batches; b++) {
@@ -127,6 +129,7 @@ export function AdminDashboardClient() {
           const json = await runBatch(fromDays, toDays, `${b + 1}`);
           totalFound += json.emailsFound ?? 0;
           totalCreated += json.bookingsCreated ?? 0;
+          totalSkipped += json.emailsSkipped ?? 0;
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Batch failed";
           failed.push(`batch ${b + 1}: ${msg}`);
@@ -137,6 +140,7 @@ export function AdminDashboardClient() {
             const json = await runBatch(fromDays, toDays, `${b + 1} retry`);
             totalFound += json.emailsFound ?? 0;
             totalCreated += json.bookingsCreated ?? 0;
+            totalSkipped += json.emailsSkipped ?? 0;
           } catch {
             // continue with remaining batches
           }
@@ -146,7 +150,9 @@ export function AdminDashboardClient() {
       const failNote =
         failed.length > 0 ? ` Some batches failed: ${failed.join("; ")}` : "";
       setSyncResult(
-        `Full sync done: ${totalCreated} new bookings from ${totalFound} emails (30 days).${failNote}`
+        `Full sync done: ${totalCreated} new bookings from ${totalFound} emails (30 days).` +
+          (totalSkipped ? ` ${totalSkipped} skipped (other venues).` : "") +
+          failNote
       );
       loadDashboard();
     } catch (err) {

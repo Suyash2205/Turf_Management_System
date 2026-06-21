@@ -61,7 +61,7 @@ async function searchKhelomoreUids(
   imapHost: string
 ): Promise<number[]> {
   if (imapHost.includes("gmail")) {
-    let query = `from:info@khelomore.com after:${formatGmailDate(since)}`;
+    let query = `from:info@khelomore.com subject:"You have a new booking from KheloMore" after:${formatGmailDate(since)}`;
     if (before) query += ` before:${formatGmailDate(before)}`;
     const uids = await client.search({ gmailraw: query }, { uid: true });
     return uids || [];
