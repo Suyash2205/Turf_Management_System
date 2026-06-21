@@ -8,6 +8,22 @@ import {
 } from "@/lib/email-parser";
 import { BookingPaymentStatus } from "@/generated/prisma/client";
 
+function getSyncSinceDate(): Date {
+  const daysBack = parseInt(process.env.EMAIL_SYNC_LOOKBACK_DAYS || "30", 10);
+
+  // When polling frequently, only scan recent mail (much faster)
+  if (process.env.EMAIL_SYNC_MODE === "poll") {
+    const pollDays = parseInt(process.env.EMAIL_SYNC_POLL_DAYS || "2", 10);
+    const since = new Date();
+    since.setDate(since.getDate() - pollDays);
+    return since;
+  }
+
+  const since = new Date();
+  since.setDate(since.getDate() - daysBack);
+  return since;
+}
+
 export async function syncBookingsFromEmail() {
   const host = process.env.EMAIL_IMAP_HOST;
   const user = process.env.EMAIL_IMAP_USER;
@@ -37,15 +53,13 @@ export async function syncBookingsFromEmail() {
   let bookingsCreated = 0;
   let emailsSkipped = 0;
   const errors: string[] = [];
+  const since = getSyncSinceDate();
 
   try {
     await client.connect();
     const lock = await client.getMailboxLock("INBOX");
 
     try {
-      const since = new Date();
-      since.setDate(since.getDate() - 30);
-
       for await (const message of client.fetch(
         { since },
         { source: true, envelope: true }

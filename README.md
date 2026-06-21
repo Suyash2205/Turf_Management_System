@@ -108,7 +108,46 @@ KHELOMORE_VENUE_NAME="Lush Sports"
 
 Emails for other venues are skipped automatically. To restrict to one turf only, optionally set `KHELOMORE_TURF_NAME` — leave it blank for all turfs.
 
-Sync runs every 15 minutes on Vercel, or manually from the admin dashboard ("Sync Emails").
+Sync runs once daily on Vercel (Hobby plan limit). For **near-instant sync (~1 min)**, use Google Apps Script — see [Instant Email Sync](#instant-email-sync) below.
+
+## Instant Email Sync
+
+Vercel's free plan only allows **1 cron per day**, so automatic sync there is not instant. Use one of these instead:
+
+### Option A: Google Apps Script (recommended, free, ~1 minute)
+
+This runs inside your Gmail account and pings TurfPay every minute when a new Khelomore email arrives.
+
+1. Log into **sunilhumne@gmail.com**
+2. Open [script.google.com](https://script.google.com) → **New project**
+3. Copy the contents of `scripts/gmail-instant-sync.gs` into the editor
+4. Set `CRON_SECRET` to the same value as in Vercel (Settings → Environment Variables)
+5. **Save** → click **Run** → `syncTurfPay` → authorize Gmail access
+6. Click **Triggers** (clock icon) → **Add Trigger**:
+   - Function: `syncTurfPay`
+   - Event source: Time-driven
+   - Type: Minutes timer → **Every minute**
+7. In Vercel, add env var: `EMAIL_SYNC_MODE=poll` (speeds up each sync)
+
+Bookings should appear within **~1 minute** of the Khelomore email.
+
+### Option B: External cron (free, ~1 minute)
+
+Use [cron-job.org](https://cron-job.org) (free):
+
+- URL: `https://turf-management-system-five.vercel.app/api/email/sync?secret=YOUR_CRON_SECRET`
+- Schedule: Every 1 minute
+- Method: GET
+
+Also set `EMAIL_SYNC_MODE=poll` in Vercel.
+
+### Option C: Vercel Pro ($20/mo)
+
+Upgrade to Pro → change `vercel.json` cron to `*/15 * * * *` for every 15 minutes (still not instant).
+
+### Manual sync anytime
+
+Admin dashboard → **Sync Emails** button (instant, no setup needed).
 
 ## Bank Statement CSV Format
 
