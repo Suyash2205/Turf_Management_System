@@ -13,31 +13,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const adminPassword = await bcrypt.hash("admin123", 12);
-  const staffPassword = await bcrypt.hash("staff123", 12);
+  try {
+    const adminPassword = await bcrypt.hash("admin123", 12);
+    const staffPassword = await bcrypt.hash("staff123", 12);
 
-  await prisma.user.upsert({
-    where: { email: "admin@turfpay.com" },
-    update: { password: adminPassword, name: "Admin", role: "ADMIN" },
-    create: {
-      email: "admin@turfpay.com",
-      password: adminPassword,
-      name: "Admin",
-      role: "ADMIN",
-    },
-  });
+    await prisma.user.upsert({
+      where: { email: "admin@turfpay.com" },
+      update: { password: adminPassword, name: "Admin", role: "ADMIN" },
+      create: {
+        email: "admin@turfpay.com",
+        password: adminPassword,
+        name: "Admin",
+        role: "ADMIN",
+      },
+    });
 
-  await prisma.user.upsert({
-    where: { email: "staff@turfpay.com" },
-    update: { password: staffPassword, name: "Ground Staff", role: "STAFF" },
-    create: {
-      email: "staff@turfpay.com",
-      password: staffPassword,
-      name: "Ground Staff",
-      role: "STAFF",
-    },
-  });
+    await prisma.user.upsert({
+      where: { email: "staff@turfpay.com" },
+      update: { password: staffPassword, name: "Ground Staff", role: "STAFF" },
+      create: {
+        email: "staff@turfpay.com",
+        password: staffPassword,
+        name: "Ground Staff",
+        role: "STAFF",
+      },
+    });
 
-  const count = await prisma.user.count();
-  return NextResponse.json({ ok: true, users: count });
+    const count = await prisma.user.count();
+    return NextResponse.json({ ok: true, users: count });
+  } catch (error) {
+    console.error("Setup error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Setup failed" },
+      { status: 500 }
+    );
+  }
 }
