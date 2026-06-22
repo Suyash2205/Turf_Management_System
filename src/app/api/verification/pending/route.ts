@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { serializePayment } from "@/lib/bookings";
 
 export async function GET() {
   const session = await auth();
@@ -19,11 +20,13 @@ export async function GET() {
 
   return NextResponse.json(
     payments.map((p) => ({
-      ...p,
-      amount: parseFloat(p.amount.toString()),
-      extractedAmount: p.extractedAmount
-        ? parseFloat(p.extractedAmount.toString())
-        : null,
+      ...serializePayment(p, { pendingProofOnly: true }),
+      createdAt: p.createdAt.toISOString(),
+      booking: {
+        customerName: p.booking.customerName,
+        bookingDate: p.booking.bookingDate.toISOString(),
+      },
+      recordedBy: p.recordedBy,
     }))
   );
 }

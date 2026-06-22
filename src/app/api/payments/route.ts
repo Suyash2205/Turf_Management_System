@@ -57,14 +57,13 @@ export async function POST(request: Request) {
         );
         proofImageUrl = blob.url;
       } else {
-        // Keep base64 fallback small enough for serverless + DB
-        if (buffer.length > 2_000_000) {
-          return NextResponse.json(
-            { error: "Image too large. Please use a smaller screenshot." },
-            { status: 400 }
-          );
-        }
-        proofImageUrl = `data:${proofImage.type || "image/jpeg"};base64,${buffer.toString("base64")}`;
+        return NextResponse.json(
+          {
+            error:
+              "Image storage not configured. Set BLOB_READ_WRITE_TOKEN on Vercel.",
+          },
+          { status: 503 }
+        );
       }
 
       // OCR is slow on serverless; opt-in only. Payment is always saved with the image.

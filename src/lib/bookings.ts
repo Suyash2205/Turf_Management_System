@@ -7,6 +7,7 @@ import {
   type Payment,
 } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
+import { isBase64ProofUrl } from "@/lib/payment-proof";
 
 export function toNumber(value: Decimal | number | string | null | undefined) {
   if (value == null) return 0;
@@ -81,12 +82,17 @@ export function serializePayment(
     (options?.pendingProofOnly &&
       payment.verificationStatus === VerificationStatus.PENDING);
 
+  const showBlobUrl =
+    includeProof &&
+    payment.proofImageUrl &&
+    !isBase64ProofUrl(payment.proofImageUrl);
+
   return {
     id: payment.id,
     bookingId: payment.bookingId,
     amount: toNumber(payment.amount),
     method: payment.method,
-    proofImageUrl: includeProof ? payment.proofImageUrl : null,
+    proofImageUrl: showBlobUrl ? payment.proofImageUrl : null,
     hasProof: !!payment.proofImageUrl,
     extractedSenderName: payment.extractedSenderName,
     extractedAmount: payment.extractedAmount

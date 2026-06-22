@@ -6,12 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { verificationBadge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
+import { paymentProofUrl } from "@/lib/payment-proof";
 
 interface PendingPayment {
   id: string;
   amount: number;
   method: string;
   proofImageUrl: string | null;
+  hasProof?: boolean;
   extractedSenderName: string | null;
   extractedAmount: number | null;
   verificationStatus: string;
@@ -87,15 +89,15 @@ export function VerificationClient() {
                         {p.extractedAmount && ` · ${formatCurrency(p.extractedAmount)}`}
                       </p>
                     )}
-                    {p.proofImageUrl && (
+                    {(p.hasProof || p.proofImageUrl) && (
                       <a
-                        href={p.proofImageUrl}
+                        href={paymentProofUrl(p.id)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-block"
                       >
                         <img
-                          src={p.proofImageUrl}
+                          src={paymentProofUrl(p.id)}
                           alt="Payment proof"
                           className="mt-2 max-h-32 rounded-lg border"
                         />

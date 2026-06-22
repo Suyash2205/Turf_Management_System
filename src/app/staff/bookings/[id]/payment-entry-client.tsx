@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { paymentStatusBadge, verificationBadge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { paymentProofUrl } from "@/lib/payment-proof";
 import { compressImage } from "@/lib/compress-image";
 
 interface Payment {
@@ -315,9 +316,9 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
                 </div>
                 <div className="text-right">
                   {verificationBadge(p.verificationStatus)}
-                  {(p.proofImageUrl || p.hasProof) && (
+                  {(p.hasProof || p.proofImageUrl) && (
                     <a
-                      href={p.proofImageUrl || `/api/payments/${p.id}/proof`}
+                      href={paymentProofUrl(p.id)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-1 block text-xs text-blue-600"

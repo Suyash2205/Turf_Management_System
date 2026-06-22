@@ -4,6 +4,7 @@ import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { verificationBadge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
+import { paymentProofUrl } from "@/lib/payment-proof";
 
 export interface VerifiablePayment {
   id: string;
@@ -28,6 +29,9 @@ export function PaymentVerificationPanel({
   onVerify,
   verifying = false,
 }: PaymentVerificationPanelProps) {
+  const proofUrl = paymentProofUrl(payment.id);
+  const hasProof = payment.hasProof || !!payment.proofImageUrl;
+
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="space-y-1">
@@ -45,29 +49,20 @@ export function PaymentVerificationPanel({
             {payment.extractedAmount && ` · ${formatCurrency(payment.extractedAmount)}`}
           </p>
         )}
-        {payment.proofImageUrl ? (
+        {hasProof && (
           <a
-            href={payment.proofImageUrl}
+            href={proofUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block"
           >
             <img
-              src={payment.proofImageUrl}
+              src={proofUrl}
               alt="Payment proof"
               className="mt-2 max-h-48 rounded-lg border"
             />
           </a>
-        ) : payment.hasProof ? (
-          <a
-            href={`/api/payments/${payment.id}/proof`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-block text-sm text-blue-600"
-          >
-            View payment proof
-          </a>
-        ) : null}
+        )}
       </div>
       {payment.verificationStatus === "PENDING" && (
         <div className="flex gap-2">

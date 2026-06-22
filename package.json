@@ -11,6 +11,7 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
+    "migrate:proofs": "npx tsx scripts/migrate-proofs-to-blob.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

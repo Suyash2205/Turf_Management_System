@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { paymentStatusBadge, verificationBadge } from "@/components/ui/badge";
 import { PaymentVerificationPanel } from "@/components/payment-verification-panel";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { paymentProofUrl } from "@/lib/payment-proof";
 
 interface Payment {
   id: string;
@@ -165,9 +166,9 @@ export function AdminBookingVerifyClient({
                 </div>
                 <div className="text-right">
                   {verificationBadge(p.verificationStatus)}
-                  {(p.proofImageUrl || p.hasProof) && (
+                  {(p.hasProof || p.proofImageUrl) && (
                     <a
-                      href={p.proofImageUrl || `/api/payments/${p.id}/proof`}
+                      href={paymentProofUrl(p.id)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-1 block text-xs text-blue-600"
