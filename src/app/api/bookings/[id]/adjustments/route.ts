@@ -32,13 +32,18 @@ export async function POST(
         ? parseFloat(body.hours)
         : undefined;
 
-    if (!["EXTRA_CHARGE", "EXTRA_HOURS"].includes(type)) {
+    if (!["EXTRA_CHARGE", "EXTRA_HOURS", "DISCOUNT"].includes(type)) {
       return NextResponse.json({ error: "Invalid adjustment type" }, { status: 400 });
     }
 
-    if (!description) {
+    if (!description && type !== "DISCOUNT") {
       return NextResponse.json({ error: "Description is required" }, { status: 400 });
     }
+
+    const finalDescription =
+      type === "DISCOUNT"
+        ? description || "Discount"
+        : description;
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: "Enter a valid amount" }, { status: 400 });
@@ -87,7 +92,7 @@ export async function POST(
         description:
           type === BookingAdjustmentType.EXTRA_HOURS
             ? `Extra ${hours} hr${hours === 1 ? "" : "s"}`
-            : description,
+            : finalDescription,
         amount,
         hoursAdded: type === BookingAdjustmentType.EXTRA_HOURS ? hours : null,
         addedById: session.user.id,
@@ -100,9 +105,11 @@ export async function POST(
       action:
         type === BookingAdjustmentType.EXTRA_HOURS
           ? "BOOKING_EXTRA_HOURS_ADDED"
-          : "BOOKING_EXTRA_ADDED",
+          : type === BookingAdjustmentType.DISCOUNT
+            ? "BOOKING_EXTRA_ADDED"
+            : "BOOKING_EXTRA_ADDED",
       session,
-      summary: `${session.user.email} added ${type === BookingAdjustmentType.EXTRA_HOURS ? `${hours} extra hr(s)` : description} (₹${amount.toLocaleString("en-IN")}) for ${booking.customerName}`,
+      summary: `${session.user.email} added ${type === BookingAdjustmentType.EXTRA_HOURS ? `${hours} extra hr(s)` : type === BookingAdjustmentType.DISCOUNT ? `discount ${finalDescription}` : finalDescription} (${type === BookingAdjustmentType.DISCOUNT ? "-" : ""}₹${amount.toLocaleString("en-IN")}) for ${booking.customerName}`,
       entityType: "adjustment",
       bookingId,
       details: {

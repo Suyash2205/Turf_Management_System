@@ -9,18 +9,32 @@ type BookingRow = Pick<
   "totalAmount" | "slotPrice" | "endTime" | "startTime" | "slotEndTime"
 >;
 
+export function sumAdjustmentTotals(
+  adjustments: Pick<AdjustmentRow, "type" | "amount">[]
+) {
+  return adjustments.reduce(
+    (acc, adj) => {
+      const amount = toNumber(adj.amount);
+      if (adj.type === BookingAdjustmentType.DISCOUNT) {
+        acc.discount += amount;
+      } else {
+        acc.charges += amount;
+      }
+      return acc;
+    },
+    { charges: 0, discount: 0 }
+  );
+}
+
 export function getBookingBaseAmount(
   booking: BookingRow,
-  adjustments: Pick<AdjustmentRow, "amount">[]
+  adjustments: Pick<AdjustmentRow, "type" | "amount">[]
 ) {
   const slotPrice = booking.slotPrice ? toNumber(booking.slotPrice) : null;
   if (slotPrice != null) return slotPrice;
 
-  const adjustmentsTotal = adjustments.reduce(
-    (sum, adj) => sum + toNumber(adj.amount),
-    0
-  );
-  return Math.max(0, toNumber(booking.totalAmount) - adjustmentsTotal);
+  const { charges, discount } = sumAdjustmentTotals(adjustments);
+  return Math.max(0, toNumber(booking.totalAmount) - charges + discount);
 }
 
 export function computeEndTimeFromHourAdjustments(
@@ -66,11 +80,8 @@ export async function syncBookingAfterAdjustmentChange(bookingId: string) {
   if (!booking) return null;
 
   const baseAmount = getBookingBaseAmount(booking, booking.adjustments);
-  const adjustmentsTotal = booking.adjustments.reduce(
-    (sum, adj) => sum + toNumber(adj.amount),
-    0
-  );
-  const newTotal = baseAmount + adjustmentsTotal;
+  const { charges, discount } = sumAdjustmentTotals(booking.adjustments);
+  const newTotal = Math.max(0, baseAmount + charges - discount);
 
   const hourAdjustments = booking.adjustments.filter(
     (adj) => adj.type === BookingAdjustmentType.EXTRA_HOURS

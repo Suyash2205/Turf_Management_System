@@ -30,6 +30,7 @@ export const MAIN_SHEET_HEADERS = [
   "Ball",
   "Bottle",
   "Other Extras",
+  "Discount",
   "Pending Amount",
   "Verified or Not",
   "Grand Total",
@@ -76,9 +77,15 @@ function categorizeExtras(adjustments: BookingAdjustment[]) {
   let ball = 0;
   let bottle = 0;
   let other = 0;
+  let discount = 0;
 
   for (const adjustment of adjustments) {
     const amount = toNumber(adjustment.amount);
+    if (adjustment.type === "DISCOUNT") {
+      discount += amount;
+      continue;
+    }
+
     const description = adjustment.description.toLowerCase();
 
     if (/\bball\b/.test(description)) {
@@ -90,7 +97,7 @@ function categorizeExtras(adjustments: BookingAdjustment[]) {
     }
   }
 
-  return { ball, bottle, other };
+  return { ball, bottle, other, discount };
 }
 
 function getVerificationLabel(booking: BookingRow) {
@@ -158,6 +165,7 @@ function buildMainSheetRow(booking: BookingRow): (string | number)[] {
     formatNumber(extras.ball),
     formatNumber(extras.bottle),
     formatNumber(extras.other),
+    formatNumber(extras.discount),
     formatNumber(pendingAmount),
     getVerificationLabel(booking),
     formatNumber(grandTotal),

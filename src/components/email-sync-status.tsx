@@ -26,10 +26,20 @@ export function EmailSyncStatus({ className = "" }: { className?: string }) {
   const [status, setStatus] = useState<EmailSyncStatusData | null>(null);
 
   useEffect(() => {
-    fetch("/api/email/sync/status")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setStatus(data))
-      .catch(() => setStatus(null));
+    async function load() {
+      try {
+        const res = await fetch("/api/email/sync/status");
+        if (res.ok) {
+          setStatus(await res.json());
+        }
+      } catch {
+        setStatus(null);
+      }
+    }
+
+    load();
+    const interval = setInterval(load, 60_000);
+    return () => clearInterval(interval);
   }, []);
 
   if (!status) return null;

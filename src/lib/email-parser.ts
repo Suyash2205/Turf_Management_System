@@ -159,16 +159,19 @@ function parseSlots(text: string) {
     /Slot Details([\s\S]*?)(?:Bill Details|Important Instructions|$)/i
   )?.[1];
 
-  if (!section)
+  if (!section) {
     return {
-      bookingDate: null,
-      slots: [] as Array<{
-        start: string;
-        end: string;
-        turfName?: string;
-        price?: number;
+      dayGroups: [] as Array<{
+        bookingDate: Date;
+        slots: Array<{
+          start: string;
+          end: string;
+          turfName?: string;
+          price?: number;
+        }>;
       }>,
     };
+  }
 
   const rawLines = section
     .split("\n")
@@ -180,27 +183,57 @@ function parseSlots(text: string) {
     lines.push(line);
   }
 
-  const bookingDate = parseKhelomoreDate(
-    section.match(
-      /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+'?\d{2,4})/i
-    )?.[1] || ""
-  );
+  const dateLinePattern =
+    /(\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+'?\d{2,4})/i;
 
-  const slots: Array<{
-    start: string;
-    end: string;
-    turfName?: string;
-    price?: number;
+  const dayGroups: Array<{
+    bookingDate: Date;
+    slots: Array<{
+      start: string;
+      end: string;
+      turfName?: string;
+      price?: number;
+    }>;
   }> = [];
 
+  let currentDate =
+    parseKhelomoreDate(
+      section.match(dateLinePattern)?.[1] || ""
+    ) ?? null;
+
+  function ensureCurrentDay() {
+    if (!currentDate) return null;
+    let group = dayGroups.find(
+      (day) =>
+        day.bookingDate.toISOString().slice(0, 10) ===
+        currentDate!.toISOString().slice(0, 10)
+    );
+    if (!group) {
+      group = { bookingDate: currentDate, slots: [] };
+      dayGroups.push(group);
+    }
+    return group;
+  }
+
   for (let i = 0; i < lines.length; i++) {
+    const dateMatch = lines[i].match(dateLinePattern);
+    if (dateMatch) {
+      currentDate = parseKhelomoreDate(dateMatch[1]);
+      ensureCurrentDay();
+      continue;
+    }
+
     const timeMatch = lines[i].match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/);
     if (!timeMatch) continue;
+
+    const day = ensureCurrentDay();
+    if (!day) continue;
 
     let turfName: string | undefined;
     let price: number | undefined;
 
     for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+      if (dateLinePattern.test(lines[j])) break;
       if (/^\d{2}:\d{2}-\d{2}:\d{2}$/.test(lines[j])) break;
       if (
         !turfName &&
@@ -217,7 +250,7 @@ function parseSlots(text: string) {
       }
     }
 
-    slots.push({
+    day.slots.push({
       start: timeMatch[1],
       end: timeMatch[2],
       turfName,
@@ -225,7 +258,7 @@ function parseSlots(text: string) {
     });
   }
 
-  return { bookingDate, slots };
+  return { dayGroups };
 }
 
 function extractLabeledAmount(section: string, label: string): number | undefined {
@@ -304,57 +337,138 @@ export function matchesVenueFilter(parsed: ParsedBookingEmail): boolean {
   return true;
 }
 
+function formatDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function buildBookingFromDayGroup(
+  common: Omit<ParsedBookingEmail, "bookingDate" | "startTime" | "endTime" | "totalAmount" | "slotPrice" | "turfName" | "externalId">,
+  group: {
+    bookingDate: Date;
+    slots: Array<{
+      start: string;
+      end: string;
+      turfName?: string;
+      price?: number;
+    }>;
+  },
+  bill: ReturnType<typeof parseBillDetails>,
+  baseExternalId: string | null,
+  allDaySlotTotal: number,
+  isSingleDay: boolean
+): ParsedBookingEmail | null {
+  const daySlotTotal = group.slots.reduce(
+    (sum, slot) => sum + (slot.price || 0),
+    0
+  );
+  const amountReceived = bill.amountReceived ?? 0;
+  const { paidOnKhelomore } = common;
+
+  let totalAmount = daySlotTotal;
+  if (paidOnKhelomore && isSingleDay && amountReceived > 0) {
+    totalAmount = amountReceived;
+  } else if (paidOnKhelomore && daySlotTotal > 0) {
+    totalAmount = daySlotTotal;
+  } else if (!totalAmount && allDaySlotTotal > 0 && bill.amountToCollect) {
+    totalAmount = Math.round(
+      (bill.amountToCollect * daySlotTotal) / allDaySlotTotal
+    );
+  }
+  if (!totalAmount && allDaySlotTotal > 0 && bill.slotPrice) {
+    totalAmount = Math.round((bill.slotPrice * daySlotTotal) / allDaySlotTotal);
+  }
+  if (!totalAmount) {
+    totalAmount = bill.amountToCollect ?? bill.slotPrice ?? 0;
+  }
+
+  if (!totalAmount || totalAmount <= 0) return null;
+
+  const turfNames = [
+    ...new Set(group.slots.map((slot) => slot.turfName).filter(Boolean)),
+  ];
+  const dateKey = formatDateKey(group.bookingDate);
+  const externalId =
+    baseExternalId && group.slots.length > 0
+      ? `${baseExternalId}#${dateKey}`
+      : baseExternalId || undefined;
+
+  return {
+    ...common,
+    bookingDate: group.bookingDate,
+    startTime: group.slots[0]?.start,
+    endTime: group.slots.at(-1)?.end,
+    totalAmount,
+    slotPrice: daySlotTotal || undefined,
+    paidOnKhelomore,
+    externalId,
+    turfName: turfNames.length === 1 ? turfNames[0] : turfNames.join(", "),
+  };
+}
+
+export function parseKhelomoreEmails(
+  subject: string,
+  body: string
+): ParsedBookingEmail[] {
+  const text = normalizeEmailBody(body);
+  const user = parseUserDetails(text);
+  const venue = parseVenueDetails(text);
+  const { dayGroups } = parseSlots(text);
+  const bill = parseBillDetails(text);
+  const baseExternalId = parseBookingId(subject, text);
+
+  if (!user.customerName) {
+    user.customerName = baseExternalId
+      ? `Guest (${baseExternalId.split("-").pop()})`
+      : "Guest booking";
+  }
+
+  if (!user.customerName || dayGroups.length === 0) return [];
+
+  const amountReceived = bill.amountReceived ?? 0;
+  const paidOnKhelomore =
+    amountReceived > 0 && /Status:\s*Completed/i.test(text);
+
+  const allDaySlotTotal = dayGroups.reduce(
+    (sum, group) =>
+      sum + group.slots.reduce((daySum, slot) => daySum + (slot.price || 0), 0),
+    0
+  );
+
+  const common = {
+    customerName: user.customerName,
+    customerPhone: user.customerPhone,
+    customerEmail: user.customerEmail,
+    couponAmount: bill.couponAmount,
+    venueName: venue.venueName,
+    location: venue.location,
+    paidOnKhelomore,
+  };
+
+  const bookings = dayGroups
+    .map((group) =>
+      buildBookingFromDayGroup(
+        common,
+        group,
+        bill,
+        baseExternalId,
+        allDaySlotTotal,
+        dayGroups.length === 1
+      )
+    )
+    .filter((booking): booking is ParsedBookingEmail => booking != null);
+
+  if (bookings.length === 1 && baseExternalId) {
+    bookings[0].externalId = baseExternalId;
+  }
+
+  return bookings;
+}
+
 export function parseKhelomoreEmail(
   subject: string,
   body: string
 ): ParsedBookingEmail | null {
-  const text = normalizeEmailBody(body);
-  const user = parseUserDetails(text);
-  const venue = parseVenueDetails(text);
-  const { bookingDate, slots } = parseSlots(text);
-  const bill = parseBillDetails(text);
-  const externalId = parseBookingId(subject, text);
-
-  if (!user.customerName) {
-    user.customerName = externalId
-      ? `Guest (${externalId.split("-").pop()})`
-      : "Guest booking";
-  }
-
-  if (!user.customerName || !bookingDate) return null;
-
-  const amountReceived = bill.amountReceived ?? 0;
-  const slotTotal = slots.reduce((sum, slot) => sum + (slot.price || 0), 0);
-  const totalAmount =
-    amountReceived > 0
-      ? amountReceived
-      : bill.amountToCollect ?? bill.slotPrice ?? slotTotal;
-
-  if (!totalAmount || totalAmount <= 0) return null;
-
-  const paidOnKhelomore =
-    amountReceived > 0 && /Status:\s*Completed/i.test(text);
-
-  const startTime = slots[0]?.start;
-  const endTime = slots.at(-1)?.end;
-  const turfNames = [...new Set(slots.map((slot) => slot.turfName).filter(Boolean))];
-
-  return {
-    customerName: user.customerName,
-    customerPhone: user.customerPhone,
-    customerEmail: user.customerEmail,
-    bookingDate,
-    startTime,
-    endTime,
-    totalAmount,
-    slotPrice: bill.slotPrice,
-    couponAmount: bill.couponAmount,
-    paidOnKhelomore,
-    externalId: externalId || undefined,
-    venueName: venue.venueName,
-    turfName: turfNames.length === 1 ? turfNames[0] : turfNames.join(", "),
-    location: venue.location,
-  };
+  return parseKhelomoreEmails(subject, body)[0] ?? null;
 }
 
 export function isKhelomoreBookingEmail(from: string, subject: string): boolean {

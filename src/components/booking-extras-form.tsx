@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock, Loader2, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { Clock, Loader2, MinusCircle, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CollapsibleSection } from "@/components/collapsible-section";
 import { formatCurrency } from "@/lib/utils";
 import { addHoursToTime } from "@/lib/booking-time";
 import { useLoading } from "@/components/loading-provider";
@@ -24,6 +25,10 @@ export function BookingExtrasForm({
   startTime,
   onSuccess,
 }: BookingExtrasFormProps) {
+  const [openSection, setOpenSection] = useState<
+    "extras" | "hours" | "discount" | null
+  >(null);
+
   const [extraDescription, setExtraDescription] = useState("");
   const [extraAmount, setExtraAmount] = useState("");
   const [extraLoading, setExtraLoading] = useState(false);
@@ -35,6 +40,12 @@ export function BookingExtrasForm({
   const [hoursLoading, setHoursLoading] = useState(false);
   const [hoursError, setHoursError] = useState("");
   const [hoursSuccess, setHoursSuccess] = useState("");
+
+  const [discountDescription, setDiscountDescription] = useState("Discount");
+  const [discountAmount, setDiscountAmount] = useState("");
+  const [discountLoading, setDiscountLoading] = useState(false);
+  const [discountError, setDiscountError] = useState("");
+  const [discountSuccess, setDiscountSuccess] = useState("");
   const { run } = useLoading();
 
   const previewEndTime = useMemo(() => {
@@ -45,7 +56,7 @@ export function BookingExtrasForm({
   }, [endTime, startTime, extraHours]);
 
   async function submitAdjustment(payload: {
-    type: "EXTRA_CHARGE" | "EXTRA_HOURS";
+    type: "EXTRA_CHARGE" | "EXTRA_HOURS" | "DISCOUNT";
     description: string;
     amount: string;
     hours?: string;
@@ -110,6 +121,7 @@ export function BookingExtrasForm({
       );
       setExtraDescription("");
       setExtraAmount("");
+      setOpenSection(null);
     } catch (err) {
       setExtraError(err instanceof Error ? err.message : "Failed to add extra");
     } finally {
@@ -146,6 +158,7 @@ export function BookingExtrasForm({
           : "Extra hours added successfully."
       );
       setHoursAmount("");
+      setOpenSection(null);
     } catch (err) {
       setHoursError(
         err instanceof Error ? err.message : "Failed to add extra hours"
@@ -155,164 +168,244 @@ export function BookingExtrasForm({
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Package className="h-4 w-4 text-emerald-600" />
-            Add extras
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-slate-500">
-            Add charges for ball, water, or other items. Amount is added to the
-            booking total.
-          </p>
+  async function handleAddDiscount(e: React.FormEvent) {
+    e.preventDefault();
+    setDiscountLoading(true);
+    setDiscountError("");
+    setDiscountSuccess("");
 
-          <div className="flex flex-wrap gap-2">
-            {EXTRA_PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => {
-                  setExtraDescription(preset);
-                  setExtraSuccess("");
-                  setExtraError("");
-                }}
-                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                  extraDescription === preset
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"
-                }`}
-              >
-                {preset}
-              </button>
-            ))}
+    try {
+      const amount = parseFloat(discountAmount);
+      const booking = await submitAdjustment({
+        type: "DISCOUNT",
+        description: discountDescription.trim() || "Discount",
+        amount: discountAmount,
+      });
+
+      setDiscountSuccess(
+        booking
+          ? `Discount of ${formatCurrency(amount)} applied. New total: ${formatCurrency(booking.totalAmount)}`
+          : "Discount applied successfully."
+      );
+      setDiscountAmount("");
+      setOpenSection(null);
+    } catch (err) {
+      setDiscountError(
+        err instanceof Error ? err.message : "Failed to add discount"
+      );
+    } finally {
+      setDiscountLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <CollapsibleSection
+        title="Add extras"
+        icon={Package}
+        open={openSection === "extras"}
+        onOpenChange={(open) => setOpenSection(open ? "extras" : null)}
+      >
+        <p className="text-sm text-slate-500">
+          Add charges for ball, water, or other items. Amount is added to the
+          booking total.
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {EXTRA_PRESETS.map((preset) => (
             <button
+              key={preset}
               type="button"
               onClick={() => {
-                setExtraDescription("");
+                setExtraDescription(preset);
                 setExtraSuccess("");
                 setExtraError("");
               }}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:border-emerald-300"
+              className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                extraDescription === preset
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300"
+              }`}
             >
-              Other
+              {preset}
             </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setExtraDescription("");
+              setExtraSuccess("");
+              setExtraError("");
+            }}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:border-emerald-300"
+          >
+            Other
+          </button>
+        </div>
+
+        <form onSubmit={handleAddExtra} className="mt-3 space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Item</label>
+            <Input
+              value={extraDescription}
+              onChange={(e) => {
+                setExtraDescription(e.target.value);
+                setExtraSuccess("");
+              }}
+              placeholder="e.g. Ball, Water, Bibs"
+              required
+            />
           </div>
-
-          <form onSubmit={handleAddExtra} className="space-y-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Item</label>
-              <Input
-                value={extraDescription}
-                onChange={(e) => {
-                  setExtraDescription(e.target.value);
-                  setExtraSuccess("");
-                }}
-                placeholder="e.g. Ball, Water, Bibs"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Amount (₹)</label>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={extraAmount}
-                onChange={(e) => {
-                  setExtraAmount(e.target.value);
-                  setExtraSuccess("");
-                }}
-                placeholder="Enter amount"
-                required
-              />
-            </div>
-            {extraError && <p className="text-sm text-red-600">{extraError}</p>}
-            {extraSuccess && (
-              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
-                {extraSuccess}
-              </p>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Amount (₹)</label>
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              value={extraAmount}
+              onChange={(e) => {
+                setExtraAmount(e.target.value);
+                setExtraSuccess("");
+              }}
+              placeholder="Enter amount"
+              required
+            />
+          </div>
+          {extraError && <p className="text-sm text-red-600">{extraError}</p>}
+          {extraSuccess && (
+            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+              {extraSuccess}
+            </p>
+          )}
+          <Button type="submit" className="w-full" disabled={extraLoading}>
+            {extraLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
             )}
-            <Button type="submit" className="w-full" disabled={extraLoading}>
-              {extraLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
+            {extraLoading ? "Adding…" : "Add to booking"}
+          </Button>
+        </form>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Add extra hours"
+        icon={Clock}
+        open={openSection === "hours"}
+        onOpenChange={(open) => setOpenSection(open ? "hours" : null)}
+      >
+        <p className="text-sm text-slate-500">
+          Extend the slot and add the charge to the booking total.
+        </p>
+
+        <form onSubmit={handleAddHours} className="mt-3 space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Extra hours</label>
+            <Input
+              type="number"
+              min="0.5"
+              max="12"
+              step="0.5"
+              value={extraHours}
+              onChange={(e) => setExtraHours(e.target.value)}
+              required
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">
+              Amount for extra hours (₹)
+            </label>
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              value={hoursAmount}
+              onChange={(e) => setHoursAmount(e.target.value)}
+              placeholder="Enter amount"
+              required
+            />
+          </div>
+          {previewEndTime && (
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              New end time:{" "}
+              <span className="font-semibold">{previewEndTime}</span>
+              {endTime && endTime !== previewEndTime && (
+                <span className="text-slate-500"> (was {endTime})</span>
               )}
-              {extraLoading ? "Adding…" : "Add to booking"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Clock className="h-4 w-4 text-emerald-600" />
-            Add extra hours
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-slate-500">
-            Extend the slot and add the charge to the booking total.
-          </p>
-
-          <form onSubmit={handleAddHours} className="space-y-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Extra hours</label>
-              <Input
-                type="number"
-                min="0.5"
-                max="12"
-                step="0.5"
-                value={extraHours}
-                onChange={(e) => setExtraHours(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Amount for extra hours (₹)
-              </label>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={hoursAmount}
-                onChange={(e) => setHoursAmount(e.target.value)}
-                placeholder="Enter amount"
-                required
-              />
-            </div>
-            {previewEndTime && (
-              <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                New end time:{" "}
-                <span className="font-semibold">{previewEndTime}</span>
-                {endTime && endTime !== previewEndTime && (
-                  <span className="text-slate-500"> (was {endTime})</span>
-                )}
-              </p>
+            </p>
+          )}
+          {hoursError && <p className="text-sm text-red-600">{hoursError}</p>}
+          {hoursSuccess && (
+            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+              {hoursSuccess}
+            </p>
+          )}
+          <Button type="submit" className="w-full" disabled={hoursLoading}>
+            {hoursLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
             )}
-            {hoursError && <p className="text-sm text-red-600">{hoursError}</p>}
-            {hoursSuccess && (
-              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
-                {hoursSuccess}
-              </p>
+            {hoursLoading ? "Adding…" : "Add extra hours"}
+          </Button>
+        </form>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Add discount"
+        icon={MinusCircle}
+        open={openSection === "discount"}
+        onOpenChange={(open) => setOpenSection(open ? "discount" : null)}
+      >
+        <p className="text-sm text-slate-500">
+          Reduce the pending amount by applying a discount to this booking.
+        </p>
+
+        <form onSubmit={handleAddDiscount} className="mt-3 space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Reason</label>
+            <Input
+              value={discountDescription}
+              onChange={(e) => {
+                setDiscountDescription(e.target.value);
+                setDiscountSuccess("");
+              }}
+              placeholder="e.g. Regular customer discount"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Discount (₹)</label>
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              value={discountAmount}
+              onChange={(e) => {
+                setDiscountAmount(e.target.value);
+                setDiscountSuccess("");
+              }}
+              placeholder="Enter discount amount"
+              required
+            />
+          </div>
+          {discountError && (
+            <p className="text-sm text-red-600">{discountError}</p>
+          )}
+          {discountSuccess && (
+            <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+              {discountSuccess}
+            </p>
+          )}
+          <Button type="submit" className="w-full" disabled={discountLoading}>
+            {discountLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <MinusCircle className="h-4 w-4" />
             )}
-            <Button type="submit" className="w-full" disabled={hoursLoading}>
-              {hoursLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
-              {hoursLoading ? "Adding…" : "Add extra hours"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+            {discountLoading ? "Applying…" : "Apply discount"}
+          </Button>
+        </form>
+      </CollapsibleSection>
     </div>
   );
 }
@@ -346,7 +439,12 @@ export function BookingAdjustmentsList({
 
   if (adjustments.length === 0) return null;
 
-  const extrasTotal = adjustments.reduce((sum, a) => sum + a.amount, 0);
+  const chargesTotal = adjustments
+    .filter((item) => item.type !== "DISCOUNT")
+    .reduce((sum, item) => sum + item.amount, 0);
+  const discountTotal = adjustments
+    .filter((item) => item.type === "DISCOUNT")
+    .reduce((sum, item) => sum + item.amount, 0);
 
   return (
     <Card>
@@ -371,13 +469,22 @@ export function BookingAdjustmentsList({
             onMessage={setMessage}
           />
         ))}
+        {discountTotal > 0 && (
+          <div className="flex justify-between text-amber-700">
+            <span>Total discount</span>
+            <span>-{formatCurrency(discountTotal)}</span>
+          </div>
+        )}
         <div className="flex justify-between border-t pt-2 font-semibold">
           <span>Total</span>
           <span>{formatCurrency(totalAmount)}</span>
         </div>
-        {extrasTotal > 0 && adjustments.length > 0 && (
+        {chargesTotal > 0 && (
           <p className="text-xs text-slate-400">
-            {formatCurrency(extrasTotal)} added in extras &amp; extra hours
+            {formatCurrency(chargesTotal)} added in extras &amp; extra hours
+            {discountTotal > 0
+              ? `, ${formatCurrency(discountTotal)} discounted`
+              : ""}
           </p>
         )}
         {message && (
@@ -414,6 +521,7 @@ function BookingAdjustmentItem({
   const { run } = useLoading();
 
   const isHours = adjustment.type === "EXTRA_HOURS";
+  const isDiscount = adjustment.type === "DISCOUNT";
 
   async function applyBookingResponse(res: Response) {
     const data = await res.json();
@@ -583,8 +691,11 @@ function BookingAdjustmentItem({
           {adjustment.description}
           {adjustment.hoursAdded ? ` (+${adjustment.hoursAdded}h)` : ""}
         </span>
-        <span className="shrink-0 font-medium">
-          +{formatCurrency(adjustment.amount)}
+        <span
+          className={`shrink-0 font-medium ${isDiscount ? "text-amber-700" : ""}`}
+        >
+          {isDiscount ? "-" : "+"}
+          {formatCurrency(adjustment.amount)}
         </span>
       </div>
       {canEdit && (

@@ -40,6 +40,7 @@ enum MatchStatus {
 enum BookingAdjustmentType {
   EXTRA_CHARGE
   EXTRA_HOURS
+  DISCOUNT
 }
 
 enum AuditAction {

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import {
   isKhelomoreBookingEmail,
   matchesVenueFilter,
-  parseKhelomoreEmail,
+  parseKhelomoreEmails,
 } from "@/lib/email-parser";
 import { BookingPaymentStatus } from "@prisma/client";
 
@@ -207,57 +207,70 @@ export async function syncBookingsFromEmail(
 
         const parsedEmail = await simpleParser(message.source!);
         const body = parsedEmail.html || parsedEmail.text || "";
-        const messageId = parsedEmail.messageId || String(message.uid);
+        const baseMessageId = parsedEmail.messageId || String(message.uid);
 
-        const existing = await prisma.booking.findUnique({
-          where: { emailMessageId: messageId },
+        const existingByMessage = await prisma.booking.findUnique({
+          where: { emailMessageId: baseMessageId },
         });
-        if (existing) continue;
+        if (existingByMessage) continue;
 
-        const bookingData = parseKhelomoreEmail(candidate.subject, body);
-        if (!bookingData) {
+        const bookingEntries = parseKhelomoreEmails(candidate.subject, body);
+        if (bookingEntries.length === 0) {
           errors.push(`Could not parse: ${candidate.subject.slice(0, 60)}`);
           continue;
         }
 
-        if (
-          bookingData.externalId &&
-          knownExternalIds.has(bookingData.externalId)
-        ) {
-          continue;
-        }
+        for (const bookingData of bookingEntries) {
+          const dateKey = bookingData.bookingDate.toISOString().slice(0, 10);
+          const emailMessageId =
+            bookingEntries.length > 1
+              ? `${baseMessageId}#${dateKey}`
+              : baseMessageId;
 
-        if (!matchesVenueFilter(bookingData)) {
-          emailsSkipped++;
-          continue;
-        }
+          const existingMessage = await prisma.booking.findUnique({
+            where: { emailMessageId },
+          });
+          if (existingMessage) continue;
 
-        await prisma.booking.create({
-          data: {
-            customerName: bookingData.customerName,
-            customerPhone: bookingData.customerPhone,
-            customerEmail: bookingData.customerEmail,
-            venueName: bookingData.venueName,
-            turfName: bookingData.turfName,
-            location: bookingData.location,
-            bookingDate: bookingData.bookingDate,
-            startTime: bookingData.startTime,
-            endTime: bookingData.endTime,
-            totalAmount: bookingData.totalAmount,
-            slotPrice: bookingData.slotPrice,
-            couponAmount: bookingData.couponAmount,
-            paidOnKhelomore: bookingData.paidOnKhelomore,
-            paymentStatus: bookingData.paidOnKhelomore
-              ? BookingPaymentStatus.COMPLETED
-              : BookingPaymentStatus.PENDING,
-            externalId: bookingData.externalId,
-            emailMessageId: messageId,
-            rawEmailSubject: candidate.subject,
-          },
-        });
-        bookingsCreated++;
-        if (bookingData.externalId) {
-          knownExternalIds.add(bookingData.externalId);
+          if (
+            bookingData.externalId &&
+            knownExternalIds.has(bookingData.externalId)
+          ) {
+            continue;
+          }
+
+          if (!matchesVenueFilter(bookingData)) {
+            emailsSkipped++;
+            continue;
+          }
+
+          await prisma.booking.create({
+            data: {
+              customerName: bookingData.customerName,
+              customerPhone: bookingData.customerPhone,
+              customerEmail: bookingData.customerEmail,
+              venueName: bookingData.venueName,
+              turfName: bookingData.turfName,
+              location: bookingData.location,
+              bookingDate: bookingData.bookingDate,
+              startTime: bookingData.startTime,
+              endTime: bookingData.endTime,
+              totalAmount: bookingData.totalAmount,
+              slotPrice: bookingData.slotPrice,
+              couponAmount: bookingData.couponAmount,
+              paidOnKhelomore: bookingData.paidOnKhelomore,
+              paymentStatus: bookingData.paidOnKhelomore
+                ? BookingPaymentStatus.COMPLETED
+                : BookingPaymentStatus.PENDING,
+              externalId: bookingData.externalId,
+              emailMessageId,
+              rawEmailSubject: candidate.subject,
+            },
+          });
+          bookingsCreated++;
+          if (bookingData.externalId) {
+            knownExternalIds.add(bookingData.externalId);
+          }
         }
       }
     } finally {

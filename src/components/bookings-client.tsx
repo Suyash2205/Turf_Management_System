@@ -40,6 +40,7 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
   const [verifyFilter, setVerifyFilter] = useState(
     searchParams.get("verify") === "pending"
   );
+  const [activeId, setActiveId] = useState<string | null>(null);
   const { run } = useLoading();
 
   async function loadBookings() {
@@ -142,8 +143,18 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
           {bookings.map((booking, index) => {
             const needsVerify = (booking.pendingVerificationCount ?? 0) > 0;
             return (
-              <Link key={booking.id} href={bookingHref(booking.id)}>
-                <Card className="transition-shadow hover:shadow-md">
+              <Link
+                key={booking.id}
+                href={bookingHref(booking.id)}
+                onClick={() => setActiveId(booking.id)}
+              >
+                <Card
+                  className={`transition-all duration-150 hover:shadow-md active:scale-[0.98] ${
+                    activeId === booking.id
+                      ? "scale-[0.98] border-emerald-400 bg-emerald-50/40 shadow-md"
+                      : ""
+                  }`}
+                >
                   <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-start gap-3">
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
