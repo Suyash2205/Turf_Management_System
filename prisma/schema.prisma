@@ -37,6 +37,11 @@ enum MatchStatus {
   MANUAL
 }
 
+enum BookingAdjustmentType {
+  EXTRA_CHARGE
+  EXTRA_HOURS
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -48,6 +53,7 @@ model User {
 
   recordedPayments Payment[]       @relation("RecordedBy")
   bankStatements BankStatement[] @relation("UploadedBy")
+  bookingAdjustments BookingAdjustment[] @relation("AddedBy")
 }
 
 model Booking {
@@ -73,8 +79,25 @@ model Booking {
   updatedAt       DateTime             @updatedAt
 
   payments Payment[]
+  adjustments BookingAdjustment[]
 
   @@index([bookingDate])
+}
+
+model BookingAdjustment {
+  id          String                @id @default(cuid())
+  bookingId   String
+  type        BookingAdjustmentType
+  description String
+  amount      Decimal               @db.Decimal(10, 2)
+  hoursAdded  Decimal?              @db.Decimal(4, 2)
+  addedById   String
+  createdAt   DateTime              @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addedBy User    @relation("AddedBy", fields: [addedById], references: [id])
+
+  @@index([bookingId])
 }
 
 model Payment {

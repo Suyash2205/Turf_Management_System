@@ -11,7 +11,13 @@ export default async function BookingDetailPage({
   const { id } = await params;
   const booking = await prisma.booking.findUnique({
     where: { id },
-    include: { payments: { orderBy: { createdAt: "desc" } } },
+    include: {
+      payments: { orderBy: { createdAt: "desc" } },
+      adjustments: {
+        orderBy: { createdAt: "desc" },
+        include: { addedBy: { select: { name: true } } },
+      },
+    },
   });
 
   if (!booking) notFound();

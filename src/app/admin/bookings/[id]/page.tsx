@@ -22,6 +22,10 @@ export default async function AdminBookingVerifyPage({
         orderBy: { createdAt: "desc" },
         include: { recordedBy: { select: { name: true } } },
       },
+      adjustments: {
+        orderBy: { createdAt: "desc" },
+        include: { addedBy: { select: { name: true } } },
+      },
     },
   });
 

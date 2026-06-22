@@ -6,6 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { paymentStatusBadge } from "@/components/ui/badge";
 import { PaymentRecordForm } from "@/components/payment-record-form";
 import { PaymentHistoryItem } from "@/components/payment-history-item";
+import {
+  BookingAdjustmentsList,
+  BookingExtrasForm,
+} from "@/components/booking-extras-form";
 import { canRecordPayment } from "@/lib/payment-access";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useState } from "react";
@@ -22,6 +26,16 @@ interface Payment {
   createdAt: string;
 }
 
+interface BookingAdjustment {
+  id: string;
+  type: string;
+  description: string;
+  amount: number;
+  hoursAdded: number | null;
+  addedBy?: { name: string } | null;
+  createdAt: string;
+}
+
 interface Booking {
   id: string;
   customerName: string;
@@ -30,10 +44,12 @@ interface Booking {
   startTime: string | null;
   endTime: string | null;
   totalAmount: number;
+  baseAmount: number;
   paidAmount: number;
   pendingAmount: number;
   paymentStatus: string;
   paidOnKhelomore: boolean;
+  adjustments: BookingAdjustment[];
   payments: Payment[];
 }
 
@@ -45,6 +61,7 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
   }
 
   const showRecordForm = canRecordPayment(booking);
+  const canAddExtras = !booking.paidOnKhelomore;
 
   return (
     <div className="space-y-4">
@@ -92,6 +109,21 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
           )}
         </CardContent>
       </Card>
+
+      <BookingAdjustmentsList
+        adjustments={booking.adjustments}
+        baseAmount={booking.baseAmount}
+        totalAmount={booking.totalAmount}
+      />
+
+      {canAddExtras && (
+        <BookingExtrasForm
+          bookingId={booking.id}
+          endTime={booking.endTime}
+          startTime={booking.startTime}
+          onSuccess={applyBooking}
+        />
+      )}
 
       {showRecordForm && (
         <Card>

@@ -5,6 +5,7 @@ import {
   VerificationStatus,
   type Booking,
   type Payment,
+  type BookingAdjustment,
 } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
 import { isBase64ProofUrl } from "@/lib/payment-proof";
@@ -75,6 +76,10 @@ const bookingWithPaymentsInclude = {
   payments: {
     orderBy: { createdAt: "desc" as const },
     include: { recordedBy: { select: { name: true } } },
+  },
+  adjustments: {
+    orderBy: { createdAt: "desc" as const },
+    include: { addedBy: { select: { name: true } } },
   },
 };
 
@@ -168,16 +173,35 @@ export function getDefaultVerificationStatus(method: PaymentMethod) {
     : VerificationStatus.PENDING;
 }
 
-export type BookingWithPayments = Booking & { payments: Payment[] };
-
 export type PaymentWithRecorder = Payment & {
   recordedBy?: { name: string } | null;
+};
+
+export type AdjustmentWithStaff = BookingAdjustment & {
+  addedBy?: { name: string } | null;
+};
+
+export type BookingWithPayments = Booking & {
+  payments: Payment[];
+  adjustments?: AdjustmentWithStaff[];
 };
 
 type SerializeOptions = {
   includeProof?: boolean;
   pendingProofOnly?: boolean;
 };
+
+export function serializeAdjustment(adjustment: AdjustmentWithStaff) {
+  return {
+    id: adjustment.id,
+    type: adjustment.type,
+    description: adjustment.description,
+    amount: toNumber(adjustment.amount),
+    hoursAdded: adjustment.hoursAdded ? toNumber(adjustment.hoursAdded) : null,
+    addedBy: adjustment.addedBy ?? null,
+    createdAt: adjustment.createdAt.toISOString(),
+  };
+}
 
 export function serializePayment(
   payment: PaymentWithRecorder,
@@ -212,11 +236,22 @@ export function serializePayment(
 }
 
 export function serializeBooking(
-  booking: BookingWithPayments & { payments: PaymentWithRecorder[] },
+  booking: BookingWithPayments & {
+    payments: PaymentWithRecorder[];
+    adjustments?: AdjustmentWithStaff[];
+  },
   options?: SerializeOptions
 ) {
   const paid = getPaidAmount(booking.payments);
   const total = toNumber(booking.totalAmount);
+  const adjustments = booking.adjustments ?? [];
+  const adjustmentsTotal = adjustments.reduce(
+    (sum, a) => sum + toNumber(a.amount),
+    0
+  );
+  const slotPrice = booking.slotPrice ? toNumber(booking.slotPrice) : null;
+  const baseAmount =
+    slotPrice ?? Math.max(0, total - adjustmentsTotal);
   const pendingVerificationCount = booking.payments.filter(
     (p) => p.verificationStatus === VerificationStatus.PENDING
   ).length;
@@ -234,6 +269,8 @@ export function serializeBooking(
     startTime: booking.startTime,
     endTime: booking.endTime,
     totalAmount: total,
+    baseAmount,
+    slotPrice,
     paidAmount: paid,
     pendingAmount: Math.max(0, total - paid),
     paidOnKhelomore: booking.paidOnKhelomore,
@@ -241,6 +278,7 @@ export function serializeBooking(
     pendingVerificationCount,
     createdAt: booking.createdAt.toISOString(),
     updatedAt: booking.updatedAt.toISOString(),
+    adjustments: adjustments.map(serializeAdjustment),
     payments: booking.payments.map((p) => serializePayment(p, options)),
   };
 }

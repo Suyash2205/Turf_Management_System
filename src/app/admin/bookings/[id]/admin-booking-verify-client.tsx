@@ -15,6 +15,7 @@ import {
   type VerifyState,
 } from "@/components/verify-payment-buttons";
 import { useLoading } from "@/components/loading-provider";
+import { BookingAdjustmentsList } from "@/components/booking-extras-form";
 
 interface Payment {
   id: string;
@@ -29,6 +30,16 @@ interface Payment {
   recordedBy?: { name: string } | null;
 }
 
+interface BookingAdjustment {
+  id: string;
+  type: string;
+  description: string;
+  amount: number;
+  hoursAdded: number | null;
+  addedBy?: { name: string } | null;
+  createdAt: string;
+}
+
 interface Booking {
   id: string;
   customerName: string;
@@ -38,10 +49,12 @@ interface Booking {
   endTime: string | null;
   turfName?: string | null;
   totalAmount: number;
+  baseAmount: number;
   paidAmount: number;
   pendingAmount: number;
   paymentStatus: string;
   paidOnKhelomore: boolean;
+  adjustments: BookingAdjustment[];
   payments: Payment[];
 }
 
@@ -131,6 +144,12 @@ export function AdminBookingVerifyClient({
           )}
         </CardContent>
       </Card>
+
+      <BookingAdjustmentsList
+        adjustments={booking.adjustments ?? []}
+        baseAmount={booking.baseAmount ?? booking.totalAmount}
+        totalAmount={booking.totalAmount}
+      />
 
       {showRecordForm && (
         <Card>
