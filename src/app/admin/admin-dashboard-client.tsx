@@ -12,6 +12,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
+import { useLoading } from "@/components/loading-provider";
 
 interface DashboardData {
   summary: {
@@ -59,13 +60,19 @@ export function AdminDashboardClient() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState("");
+  const { run } = useLoading();
 
   async function loadDashboard() {
     setLoading(true);
-    const res = await fetch("/api/dashboard?days=30");
-    const json = await res.json();
-    setData(json);
-    setLoading(false);
+    try {
+      await run(async () => {
+        const res = await fetch("/api/dashboard?days=30");
+        const json = await res.json();
+        setData(json);
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function parseSyncResponse(res: Response) {
@@ -131,54 +138,57 @@ export function AdminDashboardClient() {
     setSyncResult("");
 
     try {
-      if (!full) {
-        const res = await fetch("/api/email/sync", { method: "POST" });
-        const json = await parseSyncResponse(res);
+      await run(async () => {
+        if (!full) {
+          const res = await fetch("/api/email/sync", { method: "POST" });
+          const json = await parseSyncResponse(res);
+          setSyncResult(
+            `Sync: ${json.bookingsCreated} new bookings from ${json.emailsFound} Khelomore emails` +
+              (json.emailsSkipped ? ` (${json.emailsSkipped} skipped — other venues)` : "") +
+              (json.errors?.length ? ` (${json.errors.length} parse errors)` : "")
+          );
+          const dashRes = await fetch("/api/dashboard?days=30");
+          setData(await dashRes.json());
+          return;
+        }
+
+        const days = 30;
+        let totalFound = 0;
+        let totalCreated = 0;
+        let totalSkipped = 0;
+        const failed: string[] = [];
+
+        for (let d = 0; d < days; d++) {
+          const fromDays = d + 1;
+          const toDays = d;
+          setSyncResult(`Syncing day ${toDays + 1} ago… (${d + 1}/${days})`);
+
+          try {
+            const json = await runBatchRange(fromDays, toDays);
+            totalFound += json.emailsFound;
+            totalCreated += json.bookingsCreated;
+            totalSkipped += json.emailsSkipped;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Batch failed";
+            failed.push(`day ${toDays + 1} ago: ${msg}`);
+          }
+
+          if (d < days - 1) {
+            await new Promise((r) => setTimeout(r, 300));
+          }
+        }
+
+        const failNote =
+          failed.length > 0 ? ` Some days failed: ${failed.join("; ")}.` : "";
         setSyncResult(
-          `Sync: ${json.bookingsCreated} new bookings from ${json.emailsFound} Khelomore emails` +
-            (json.emailsSkipped ? ` (${json.emailsSkipped} skipped — other venues)` : "") +
-            (json.errors?.length ? ` (${json.errors.length} parse errors)` : "")
+          `Full sync done: ${totalCreated} new bookings from ${totalFound} Lush Sports emails (30 days).` +
+            (totalSkipped ? ` ${totalSkipped} skipped.` : "") +
+            failNote +
+            (failed.length > 0 ? " Re-run Full Sync to retry failed days (duplicates are skipped)." : "")
         );
-        loadDashboard();
-        return;
-      }
-
-      // 30 × 1-day batches; auto-splits on timeout
-      const days = 30;
-      let totalFound = 0;
-      let totalCreated = 0;
-      let totalSkipped = 0;
-      const failed: string[] = [];
-
-      for (let d = 0; d < days; d++) {
-        const fromDays = d + 1;
-        const toDays = d;
-        setSyncResult(`Syncing day ${toDays + 1} ago… (${d + 1}/${days})`);
-
-        try {
-          const json = await runBatchRange(fromDays, toDays);
-          totalFound += json.emailsFound;
-          totalCreated += json.bookingsCreated;
-          totalSkipped += json.emailsSkipped;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Batch failed";
-          failed.push(`day ${toDays + 1} ago: ${msg}`);
-        }
-
-        if (d < days - 1) {
-          await new Promise((r) => setTimeout(r, 300));
-        }
-      }
-
-      const failNote =
-        failed.length > 0 ? ` Some days failed: ${failed.join("; ")}.` : "";
-      setSyncResult(
-        `Full sync done: ${totalCreated} new bookings from ${totalFound} Lush Sports emails (30 days).` +
-          (totalSkipped ? ` ${totalSkipped} skipped.` : "") +
-          failNote +
-          (failed.length > 0 ? " Re-run Full Sync to retry failed days (duplicates are skipped)." : "")
-      );
-      loadDashboard();
+        const dashRes = await fetch("/api/dashboard?days=30");
+        setData(await dashRes.json());
+      });
     } catch (err) {
       setSyncResult(err instanceof Error ? err.message : "Sync failed");
     } finally {

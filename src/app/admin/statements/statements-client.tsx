@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
+import { useLoading } from "@/components/loading-provider";
 
 interface Statement {
   id: string;
@@ -23,11 +24,14 @@ export function StatementsClient() {
   const [statementDate, setStatementDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState("");
+  const { run } = useLoading();
 
   async function loadStatements() {
-    const res = await fetch("/api/bank-statements");
-    const data = await res.json();
-    setStatements(data);
+    await run(async () => {
+      const res = await fetch("/api/bank-statements");
+      const data = await res.json();
+      setStatements(data);
+    });
   }
 
   async function handleUpload(e: React.FormEvent) {
@@ -37,26 +41,32 @@ export function StatementsClient() {
     setLoading(true);
     setResult("");
 
-    const formData = new FormData();
-    formData.append("file", file);
-    if (statementDate) formData.append("statementDate", statementDate);
+    try {
+      await run(async () => {
+        const formData = new FormData();
+        formData.append("file", file);
+        if (statementDate) formData.append("statementDate", statementDate);
 
-    const res = await fetch("/api/bank-statements", {
-      method: "POST",
-      body: formData,
-    });
-    const data = await res.json();
-    setLoading(false);
+        const res = await fetch("/api/bank-statements", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
 
-    if (res.ok) {
-      setResult(
-        `Uploaded! Parsed ${data.transactionsParsed} transactions, auto-matched ${data.autoMatched} payments.`
-      );
-      setFile(null);
-      setStatementDate("");
-      loadStatements();
-    } else {
-      setResult(data.error || "Upload failed");
+        if (res.ok) {
+          setResult(
+            `Uploaded! Parsed ${data.transactionsParsed} transactions, auto-matched ${data.autoMatched} payments.`
+          );
+          setFile(null);
+          setStatementDate("");
+          const listRes = await fetch("/api/bank-statements");
+          setStatements(await listRes.json());
+        } else {
+          setResult(data.error || "Upload failed");
+        }
+      });
+    } finally {
+      setLoading(false);
     }
   }
 

@@ -11,6 +11,7 @@ import { PaymentHistoryItem } from "@/components/payment-history-item";
 import { canRecordPayment } from "@/lib/payment-access";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Check, X } from "lucide-react";
+import { useLoading } from "@/components/loading-provider";
 
 interface Payment {
   id: string;
@@ -50,10 +51,13 @@ export function AdminBookingVerifyClient({
   const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(
     null
   );
+  const { run } = useLoading();
 
   async function refreshBooking() {
-    const res = await fetch(`/api/bookings/${booking.id}`);
-    if (res.ok) setBooking(await res.json());
+    await run(async () => {
+      const res = await fetch(`/api/bookings/${booking.id}`);
+      if (res.ok) setBooking(await res.json());
+    });
   }
 
   async function verifyPayment(
@@ -62,12 +66,15 @@ export function AdminBookingVerifyClient({
   ) {
     setVerifyingPaymentId(paymentId);
     try {
-      await fetch("/api/payments/verify", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId, status }),
+      await run(async () => {
+        await fetch("/api/payments/verify", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId, status }),
+        });
+        const res = await fetch(`/api/bookings/${booking.id}`);
+        if (res.ok) setBooking(await res.json());
       });
-      await refreshBooking();
     } finally {
       setVerifyingPaymentId(null);
     }

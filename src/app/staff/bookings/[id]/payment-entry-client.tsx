@@ -9,6 +9,7 @@ import { PaymentHistoryItem } from "@/components/payment-history-item";
 import { canRecordPayment } from "@/lib/payment-access";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useState } from "react";
+import { useLoading } from "@/components/loading-provider";
 
 interface Payment {
   id: string;
@@ -39,12 +40,15 @@ interface Booking {
 
 export function PaymentEntryClient({ booking: initialBooking }: { booking: Booking }) {
   const [booking, setBooking] = useState(initialBooking);
+  const { run } = useLoading();
 
   async function refreshBooking() {
-    const res = await fetch(`/api/bookings/${booking.id}`);
-    if (res.ok) {
-      setBooking(await res.json());
-    }
+    await run(async () => {
+      const res = await fetch(`/api/bookings/${booking.id}`);
+      if (res.ok) {
+        setBooking(await res.json());
+      }
+    });
   }
 
   const showRecordForm = canRecordPayment(booking);

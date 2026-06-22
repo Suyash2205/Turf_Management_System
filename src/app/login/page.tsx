@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useLoading } from "@/components/loading-provider";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,27 +14,32 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { run } = useLoading();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await run(async () =>
+        signIn("credentials", {
+          email,
+          password,
+          redirect: false,
+        })
+      );
 
-    setLoading(false);
+      if (result?.error) {
+        setError("Invalid email or password");
+        return;
+      }
 
-    if (result?.error) {
-      setError("Invalid email or password");
-      return;
+      router.refresh();
+      router.push("/");
+    } finally {
+      setLoading(false);
     }
-
-    router.refresh();
-    router.push("/");
   }
 
   return (

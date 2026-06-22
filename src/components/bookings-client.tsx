@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge, paymentStatusBadge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useLoading } from "@/components/loading-provider";
 
 interface Booking {
   id: string;
@@ -38,17 +39,23 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
   const [verifyFilter, setVerifyFilter] = useState(
     searchParams.get("verify") === "pending"
   );
+  const { run } = useLoading();
 
   async function loadBookings() {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (!verifyFilter) params.set("date", date);
-    if (statusFilter) params.set("status", statusFilter);
-    if (verifyFilter) params.set("verify", "pending");
-    const res = await fetch(`/api/bookings?${params}`);
-    const data = await res.json();
-    setBookings(data);
-    setLoading(false);
+    try {
+      await run(async () => {
+        const params = new URLSearchParams();
+        if (!verifyFilter) params.set("date", date);
+        if (statusFilter) params.set("status", statusFilter);
+        if (verifyFilter) params.set("verify", "pending");
+        const res = await fetch(`/api/bookings?${params}`);
+        const data = await res.json();
+        setBookings(data);
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {

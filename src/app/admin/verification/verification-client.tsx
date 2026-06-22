@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { verificationBadge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { paymentProofUrl } from "@/lib/payment-proof";
+import { useLoading } from "@/components/loading-provider";
 
 interface PendingPayment {
   id: string;
@@ -31,24 +32,32 @@ export function VerificationClient() {
   const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(
     null
   );
+  const { run } = useLoading();
 
   async function loadPayments() {
     setLoading(true);
-    const res = await fetch("/api/verification/pending");
-    const data = await res.json();
-    setPayments(data);
-    setLoading(false);
+    try {
+      await run(async () => {
+        const res = await fetch("/api/verification/pending");
+        const data = await res.json();
+        setPayments(data);
+      });
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function verifyPayment(paymentId: string, status: "VERIFIED" | "REJECTED") {
     setVerifyingPaymentId(paymentId);
     try {
-      await fetch("/api/payments/verify", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId, status }),
+      await run(async () => {
+        await fetch("/api/payments/verify", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId, status }),
+        });
+        setPayments((prev) => prev.filter((p) => p.id !== paymentId));
       });
-      setPayments((prev) => prev.filter((p) => p.id !== paymentId));
     } finally {
       setVerifyingPaymentId(null);
     }
