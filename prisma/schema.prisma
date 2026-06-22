@@ -42,6 +42,24 @@ enum BookingAdjustmentType {
   EXTRA_HOURS
 }
 
+enum AuditAction {
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  PAYMENT_RECORDED
+  PAYMENT_UPDATED
+  PAYMENT_DELETED
+  PAYMENT_VERIFIED
+  PAYMENT_REJECTED
+  PAYMENT_AUTO_VERIFIED
+  BOOKING_EXTRA_ADDED
+  BOOKING_EXTRA_UPDATED
+  BOOKING_EXTRA_REMOVED
+  BOOKING_EXTRA_HOURS_ADDED
+  EMAIL_SYNC
+  BANK_STATEMENT_UPLOADED
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -54,6 +72,7 @@ model User {
   recordedPayments Payment[]       @relation("RecordedBy")
   bankStatements BankStatement[] @relation("UploadedBy")
   bookingAdjustments BookingAdjustment[] @relation("AddedBy")
+  auditLogs          AuditLog[]          @relation("AuditActor")
 }
 
 model Booking {
@@ -98,6 +117,30 @@ model BookingAdjustment {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   addedBy User    @relation("AddedBy", fields: [addedById], references: [id])
 
+  @@index([bookingId])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  action     AuditAction
+  userId     String?
+  userEmail  String?
+  userName   String?
+  userRole   UserRole?
+  entityType String?
+  entityId   String?
+  bookingId  String?
+  summary    String
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  user User? @relation("AuditActor", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userEmail])
+  @@index([action])
   @@index([bookingId])
 }
 

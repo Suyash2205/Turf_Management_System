@@ -9,6 +9,8 @@ import {
 import { canDeletePayment, canModifyPayment } from "@/lib/payment-access";
 import { extractPaymentFromImage } from "@/lib/ocr";
 import { PaymentMethod, VerificationStatus } from "@prisma/client";
+import { logAudit } from "@/lib/audit-log";
+import { toNumber } from "@/lib/bookings";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -43,7 +45,10 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const existing = await prisma.payment.findUnique({ where: { id } });
+  const existing = await prisma.payment.findUnique({
+    where: { id },
+    include: { booking: { select: { customerName: true } } },
+  });
   if (!existing) {
     return NextResponse.json({ error: "Payment not found" }, { status: 404 });
   }
@@ -146,6 +151,22 @@ export async function PATCH(
 
     const booking = await recalculateAndSerializeBooking(payment.bookingId);
 
+    await logAudit({
+      action: "PAYMENT_UPDATED",
+      session,
+      summary: `${session.user.email} edited payment (₹${toNumber(payment.amount).toLocaleString("en-IN")}) for ${existing.booking.customerName}`,
+      entityType: "payment",
+      entityId: payment.id,
+      bookingId: payment.bookingId,
+      details: {
+        amount: toNumber(payment.amount),
+        method: payment.method,
+        hasProof: !!(proofImage && proofImage.size > 0) || !!payment.proofImageUrl,
+        customerName: existing.booking.customerName,
+      },
+      request,
+    });
+
     return NextResponse.json({ payment, booking });
   } catch (error) {
     console.error("Payment update error:", error);
@@ -160,7 +181,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -169,7 +190,10 @@ export async function DELETE(
   }
 
   const { id } = await params;
-  const existing = await prisma.payment.findUnique({ where: { id } });
+  const existing = await prisma.payment.findUnique({
+    where: { id },
+    include: { booking: { select: { customerName: true } } },
+  });
   if (!existing) {
     return NextResponse.json({ error: "Payment not found" }, { status: 404 });
   }
@@ -180,6 +204,21 @@ export async function DELETE(
 
   await prisma.payment.delete({ where: { id } });
   const booking = await recalculateAndSerializeBooking(existing.bookingId);
+
+  await logAudit({
+    action: "PAYMENT_DELETED",
+    session,
+    summary: `${session.user.email} deleted ₹${toNumber(existing.amount).toLocaleString("en-IN")} payment for ${existing.booking.customerName}`,
+    entityType: "payment",
+    entityId: existing.id,
+    bookingId: existing.bookingId,
+    details: {
+      amount: toNumber(existing.amount),
+      method: existing.method,
+      customerName: existing.booking.customerName,
+    },
+    request,
+  });
 
   return NextResponse.json({ success: true, booking });
 }

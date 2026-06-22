@@ -10,13 +10,16 @@ import {
   LogOut,
   ShieldCheck,
   FileText,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { canViewAuditLogs } from "@/lib/audit-log";
 import { Button } from "./ui/button";
 
 interface NavProps {
   role: "STAFF" | "ADMIN";
   userName: string;
+  userEmail?: string;
 }
 
 type NavLink = {
@@ -47,7 +50,21 @@ const adminLinks: NavLink[] = [
     shortLabel: "Statements",
     icon: FileText,
   },
+  {
+    href: "/admin/logs",
+    label: "Activity Log",
+    shortLabel: "Logs",
+    icon: ScrollText,
+  },
 ];
+
+function getAdminLinks(userEmail?: string): NavLink[] {
+  const links = [...adminLinks];
+  if (!userEmail || !canViewAuditLogs(userEmail)) {
+    return links.filter((link) => link.href !== "/admin/logs");
+  }
+  return links;
+}
 
 function linkIsActive(
   link: NavLink,
@@ -125,11 +142,11 @@ function NavLinks({
   );
 }
 
-function MobileBottomNav({ role }: { role: "STAFF" | "ADMIN" }) {
+function MobileBottomNav({ role, userEmail }: { role: "STAFF" | "ADMIN"; userEmail?: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const verifyPending = searchParams.get("verify") === "pending";
-  const links = role === "ADMIN" ? adminLinks : staffLinks;
+  const links = role === "ADMIN" ? getAdminLinks(userEmail) : staffLinks;
 
   if (role !== "ADMIN") {
     return null;
@@ -153,9 +170,9 @@ function MobileBottomNav({ role }: { role: "STAFF" | "ADMIN" }) {
   );
 }
 
-export function AppNav({ role, userName }: NavProps) {
+export function AppNav({ role, userName, userEmail }: NavProps) {
   const pathname = usePathname();
-  const links = role === "ADMIN" ? adminLinks : staffLinks;
+  const links = role === "ADMIN" ? getAdminLinks(userEmail) : staffLinks;
 
   return (
     <>
@@ -186,7 +203,10 @@ export function AppNav({ role, userName }: NavProps) {
               variant="ghost"
               size="sm"
               className="px-2 sm:px-3"
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={async () => {
+                await fetch("/api/audit/logout", { method: "POST" });
+                signOut({ callbackUrl: "/login" });
+              }}
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Logout</span>
@@ -196,7 +216,7 @@ export function AppNav({ role, userName }: NavProps) {
       </header>
 
       <Suspense fallback={null}>
-        <MobileBottomNav role={role} />
+        <MobileBottomNav role={role} userEmail={userEmail} />
       </Suspense>
     </>
   );

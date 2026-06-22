@@ -13,7 +13,7 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen bg-slate-50 pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] sm:pb-0">
-      <AppNav role="ADMIN" userName={session.user.name} />
+      <AppNav role="ADMIN" userName={session.user.name} userEmail={session.user.email} />
       <main className="mx-auto max-w-6xl px-4 py-4 sm:px-4 sm:py-6">
         {children}
       </main>

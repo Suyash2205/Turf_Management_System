@@ -8,6 +8,8 @@ import {
 } from "@/lib/bookings";
 import { extractPaymentFromImage } from "@/lib/ocr";
 import { PaymentMethod, VerificationStatus } from "@prisma/client";
+import { logAudit } from "@/lib/audit-log";
+import { toNumber } from "@/lib/bookings";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -110,6 +112,22 @@ export async function POST(request: Request) {
     });
 
     const updatedBooking = await recalculateAndSerializeBooking(bookingId);
+
+    await logAudit({
+      action: "PAYMENT_RECORDED",
+      session,
+      summary: `${session.user.email} recorded ₹${amount.toLocaleString("en-IN")} ${method} payment for ${booking.customerName}`,
+      entityType: "payment",
+      entityId: payment.id,
+      bookingId,
+      details: {
+        amount,
+        method,
+        hasProof: !!(proofImage && proofImage.size > 0),
+        customerName: booking.customerName,
+      },
+      request,
+    });
 
     return NextResponse.json({ payment, booking: updatedBooking }, { status: 201 });
   } catch (error) {

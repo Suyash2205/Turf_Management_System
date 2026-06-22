@@ -6,6 +6,7 @@ import {
   syncBookingAfterAdjustmentChange,
 } from "@/lib/booking-adjustments";
 import { toNumber } from "@/lib/bookings";
+import { logAudit } from "@/lib/audit-log";
 
 function canModifyAdjustments(paidOnKhelomore: boolean) {
   return !paidOnKhelomore;
@@ -25,7 +26,7 @@ export async function PATCH(
   try {
     const existing = await prisma.bookingAdjustment.findUnique({
       where: { id: adjustmentId },
-      include: { booking: true },
+      include: { booking: { select: { customerName: true, paidOnKhelomore: true } } },
     });
 
     if (!existing || existing.bookingId !== bookingId) {
@@ -79,6 +80,24 @@ export async function PATCH(
     });
 
     const booking = await syncBookingAfterAdjustmentChange(bookingId);
+
+    await logAudit({
+      action: "BOOKING_EXTRA_UPDATED",
+      session,
+      summary: `${session.user.email} updated ${existing.type === BookingAdjustmentType.EXTRA_HOURS ? "extra hours" : existing.description} for ${existing.booking.customerName}`,
+      entityType: "adjustment",
+      entityId: adjustmentId,
+      bookingId,
+      details: {
+        type: existing.type,
+        description,
+        amount,
+        hours: hours ?? null,
+        customerName: existing.booking.customerName,
+      },
+      request,
+    });
+
     return NextResponse.json({ booking });
   } catch (error) {
     console.error("Adjustment update error:", error);
@@ -93,7 +112,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; adjustmentId: string }> }
 ) {
   const session = await auth();
@@ -106,7 +125,7 @@ export async function DELETE(
   try {
     const existing = await prisma.bookingAdjustment.findUnique({
       where: { id: adjustmentId },
-      include: { booking: true },
+      include: { booking: { select: { customerName: true, paidOnKhelomore: true } } },
     });
 
     if (!existing || existing.bookingId !== bookingId) {
@@ -119,6 +138,23 @@ export async function DELETE(
 
     await prisma.bookingAdjustment.delete({ where: { id: adjustmentId } });
     const booking = await syncBookingAfterAdjustmentChange(bookingId);
+
+    await logAudit({
+      action: "BOOKING_EXTRA_REMOVED",
+      session,
+      summary: `${session.user.email} removed ${existing.description} (₹${toNumber(existing.amount).toLocaleString("en-IN")}) for ${existing.booking.customerName}`,
+      entityType: "adjustment",
+      entityId: adjustmentId,
+      bookingId,
+      details: {
+        type: existing.type,
+        description: existing.description,
+        amount: toNumber(existing.amount),
+        customerName: existing.booking.customerName,
+      },
+      request,
+    });
+
     return NextResponse.json({ booking });
   } catch (error) {
     console.error("Adjustment delete error:", error);

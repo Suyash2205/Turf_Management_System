@@ -8,6 +8,7 @@ import {
 } from "@/lib/booking-adjustments";
 import { fetchSerializedBooking } from "@/lib/bookings";
 import { addHoursToTime } from "@/lib/booking-time";
+import { logAudit } from "@/lib/audit-log";
 
 export async function POST(
   request: Request,
@@ -94,6 +95,26 @@ export async function POST(
     });
 
     const updatedBooking = await syncBookingAfterAdjustmentChange(bookingId);
+
+    await logAudit({
+      action:
+        type === BookingAdjustmentType.EXTRA_HOURS
+          ? "BOOKING_EXTRA_HOURS_ADDED"
+          : "BOOKING_EXTRA_ADDED",
+      session,
+      summary: `${session.user.email} added ${type === BookingAdjustmentType.EXTRA_HOURS ? `${hours} extra hr(s)` : description} (₹${amount.toLocaleString("en-IN")}) for ${booking.customerName}`,
+      entityType: "adjustment",
+      bookingId,
+      details: {
+        type,
+        description,
+        amount,
+        hours: hours ?? null,
+        customerName: booking.customerName,
+      },
+      request,
+    });
+
     return NextResponse.json({ booking: updatedBooking }, { status: 201 });
   } catch (error) {
     console.error("Booking adjustment error:", error);

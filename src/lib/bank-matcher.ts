@@ -1,8 +1,16 @@
 import Papa from "papaparse";
 import { prisma } from "@/lib/db";
 import { amountsMatch, namesMatch } from "@/lib/ocr";
-import { MatchStatus, VerificationStatus } from "@prisma/client";
+import { MatchStatus, VerificationStatus, type UserRole } from "@prisma/client";
 import { toNumber } from "@/lib/bookings";
+import { logAudit } from "@/lib/audit-log";
+
+export type BankMatchActor = {
+  actorId: string;
+  actorEmail: string;
+  actorName: string;
+  actorRole?: UserRole;
+};
 
 export interface ParsedBankRow {
   transactionDate: Date | null;
@@ -75,7 +83,10 @@ export function parseBankStatementCsv(content: string): ParsedBankRow[] {
   return rows;
 }
 
-export async function matchBankTransactions(statementId: string) {
+export async function matchBankTransactions(
+  statementId: string,
+  actor?: BankMatchActor
+) {
   const transactions = await prisma.bankTransaction.findMany({
     where: { statementId, matchStatus: MatchStatus.UNMATCHED },
   });
@@ -126,6 +137,29 @@ export async function matchBankTransactions(statementId: string) {
             },
           }),
         ]);
+
+        if (actor) {
+          await logAudit({
+            action: "PAYMENT_AUTO_VERIFIED",
+            actor: {
+              id: actor.actorId,
+              email: actor.actorEmail,
+              name: actor.actorName,
+              role: actor.actorRole ?? "ADMIN",
+            },
+            summary: `Payment auto-verified (₹${toNumber(payment.amount).toLocaleString("en-IN")}) via bank statement uploaded by ${actor.actorEmail}`,
+            entityType: "payment",
+            entityId: payment.id,
+            bookingId: payment.bookingId,
+            details: {
+              amount: toNumber(payment.amount),
+              customerName: payment.booking.customerName,
+              statementId,
+              transactionDescription: txn.description,
+            },
+          });
+        }
+
         matched++;
         break;
       }

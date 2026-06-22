@@ -3,6 +3,7 @@ import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseBankStatementCsv, matchBankTransactions } from "@/lib/bank-matcher";
+import { logAudit } from "@/lib/audit-log";
 
 export async function GET() {
   const session = await auth();
@@ -62,7 +63,26 @@ export async function POST(request: Request) {
     include: { transactions: true },
   });
 
-  const matched = await matchBankTransactions(statement.id);
+  const matched = await matchBankTransactions(statement.id, {
+    actorId: session.user.id,
+    actorEmail: session.user.email,
+    actorName: session.user.name,
+    actorRole: session.user.role,
+  });
+
+  await logAudit({
+    action: "BANK_STATEMENT_UPLOADED",
+    session,
+    summary: `${session.user.email} uploaded bank statement ${file.name} (${rows.length} transactions, ${matched} auto-matched)`,
+    entityType: "bank_statement",
+    entityId: statement.id,
+    details: {
+      fileName: file.name,
+      transactionsParsed: rows.length,
+      autoMatched: matched,
+    },
+    request,
+  });
 
   return NextResponse.json({
     statement,

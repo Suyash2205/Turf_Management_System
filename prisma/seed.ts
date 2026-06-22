@@ -1,34 +1,12 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
+import { upsertDefaultUsers } from "../src/lib/default-users";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const adminPassword = await bcrypt.hash("admin123", 12);
-  const staffPassword = await bcrypt.hash("staff123", 12);
-
-  await prisma.user.upsert({
-    where: { email: "admin@turfpay.com" },
-    update: { password: adminPassword, name: "Admin", role: "ADMIN" },
-    create: {
-      email: "admin@turfpay.com",
-      password: adminPassword,
-      name: "Admin",
-      role: "ADMIN",
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { email: "staff@turfpay.com" },
-    update: { password: staffPassword, name: "Ground Staff", role: "STAFF" },
-    create: {
-      email: "staff@turfpay.com",
-      password: staffPassword,
-      name: "Ground Staff",
-      role: "STAFF",
-    },
-  });
+  await upsertDefaultUsers(prisma);
 
   const today = new Date();
   const tomorrow = new Date(today);
@@ -83,8 +61,6 @@ async function main() {
   });
 
   console.log("Seed completed!");
-  console.log("Admin: admin@turfpay.com / admin123");
-  console.log("Staff: staff@turfpay.com / staff123");
 }
 
 main()

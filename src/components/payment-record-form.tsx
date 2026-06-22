@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Camera, Image as ImageIcon } from "lucide-react";
+import { Camera, Image as ImageIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { compressImage } from "@/lib/compress-image";
+import { useLoading } from "@/components/loading-provider";
 
 interface PaymentRecordFormProps {
   bookingId: string;
@@ -29,6 +30,7 @@ export function PaymentRecordForm({
   const [compressing, setCompressing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const { run } = useLoading();
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -84,15 +86,20 @@ export function PaymentRecordForm({
       formData.append("method", method);
       if (proofImage) formData.append("proofImage", proofImage);
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 90000);
+      const res = await run(async () => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 90000);
 
-      const res = await fetch("/api/payments", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
+        try {
+          return await fetch("/api/payments", {
+            method: "POST",
+            body: formData,
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
       });
-      clearTimeout(timeout);
 
       const text = await res.text();
       let data: { error?: string; booking?: Record<string, unknown> };
@@ -219,6 +226,7 @@ export function PaymentRecordForm({
         size="lg"
         disabled={loading || compressing}
       >
+        {loading && <Loader2 className="h-4 w-4 animate-spin" />}
         {loading ? "Submitting..." : compressing ? "Preparing image..." : submitLabel}
       </Button>
     </form>

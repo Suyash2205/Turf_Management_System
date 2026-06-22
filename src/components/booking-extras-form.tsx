@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import { Clock, Loader2, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency } from "@/lib/utils";
 import { addHoursToTime } from "@/lib/booking-time";
+import { useLoading } from "@/components/loading-provider";
 
 const EXTRA_PRESETS = ["Ball", "Water"] as const;
 
@@ -34,6 +35,7 @@ export function BookingExtrasForm({
   const [hoursLoading, setHoursLoading] = useState(false);
   const [hoursError, setHoursError] = useState("");
   const [hoursSuccess, setHoursSuccess] = useState("");
+  const { run } = useLoading();
 
   const previewEndTime = useMemo(() => {
     const base = endTime || startTime;
@@ -53,17 +55,21 @@ export function BookingExtrasForm({
       throw new Error("Enter a valid amount");
     }
 
-    const res = await fetch(`/api/bookings/${bookingId}/adjustments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: payload.type,
-        description: payload.description,
-        amount,
-        hours:
-          payload.type === "EXTRA_HOURS" ? parseFloat(payload.hours || "0") : undefined,
-      }),
-    });
+    const res = await run(async () =>
+      fetch(`/api/bookings/${bookingId}/adjustments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: payload.type,
+          description: payload.description,
+          amount,
+          hours:
+            payload.type === "EXTRA_HOURS"
+              ? parseFloat(payload.hours || "0")
+              : undefined,
+        }),
+      })
+    );
 
     const data = await res.json();
     if (!res.ok) {
@@ -231,7 +237,11 @@ export function BookingExtrasForm({
               </p>
             )}
             <Button type="submit" className="w-full" disabled={extraLoading}>
-              <Plus className="h-4 w-4" />
+              {extraLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
               {extraLoading ? "Adding…" : "Add to booking"}
             </Button>
           </form>
@@ -293,7 +303,11 @@ export function BookingExtrasForm({
               </p>
             )}
             <Button type="submit" className="w-full" disabled={hoursLoading}>
-              <Plus className="h-4 w-4" />
+              {hoursLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
               {hoursLoading ? "Adding…" : "Add extra hours"}
             </Button>
           </form>
@@ -397,6 +411,7 @@ function BookingAdjustmentItem({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { run } = useLoading();
 
   const isHours = adjustment.type === "EXTRA_HOURS";
 
@@ -444,13 +459,12 @@ function BookingAdjustmentItem({
       }
 
       const booking = await applyBookingResponse(
-        await fetch(
-          `/api/bookings/${bookingId}/adjustments/${adjustment.id}`,
-          {
+        await run(async () =>
+          fetch(`/api/bookings/${bookingId}/adjustments/${adjustment.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
-          }
+          })
         )
       );
 
@@ -478,9 +492,10 @@ function BookingAdjustmentItem({
 
     try {
       const booking = await applyBookingResponse(
-        await fetch(
-          `/api/bookings/${bookingId}/adjustments/${adjustment.id}`,
-          { method: "DELETE" }
+        await run(async () =>
+          fetch(`/api/bookings/${bookingId}/adjustments/${adjustment.id}`, {
+            method: "DELETE",
+          })
         )
       );
 
@@ -532,6 +547,9 @@ function BookingAdjustmentItem({
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="flex gap-2">
           <Button type="submit" size="sm" disabled={loading}>
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : null}
             {loading ? "Saving…" : "Save"}
           </Button>
           <Button
@@ -578,7 +596,11 @@ function BookingAdjustmentItem({
             disabled={loading}
             onClick={() => setEditing(true)}
           >
-            <Pencil className="h-3.5 w-3.5" />
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Pencil className="h-3.5 w-3.5" />
+            )}
             Edit
           </Button>
           <Button
@@ -588,8 +610,12 @@ function BookingAdjustmentItem({
             disabled={loading}
             onClick={handleDelete}
           >
-            <Trash2 className="h-3.5 w-3.5" />
-            Remove
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+            {loading ? "Removing…" : "Remove"}
           </Button>
         </div>
       )}
