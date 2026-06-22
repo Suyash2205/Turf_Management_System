@@ -72,6 +72,8 @@ model Booking {
   updatedAt       DateTime             @updatedAt
 
   payments Payment[]
+
+  @@index([bookingDate])
 }
 
 model Payment {

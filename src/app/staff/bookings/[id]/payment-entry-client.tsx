@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Camera, Image as ImageIcon, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +15,7 @@ interface Payment {
   amount: number;
   method: string;
   proofImageUrl: string | null;
+  hasProof?: boolean;
   extractedSenderName: string | null;
   extractedAmount: number | null;
   verificationStatus: string;
@@ -37,10 +37,10 @@ interface Booking {
   payments: Payment[];
 }
 
-export function PaymentEntryClient({ booking }: { booking: Booking }) {
-  const router = useRouter();
+export function PaymentEntryClient({ booking: initialBooking }: { booking: Booking }) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [booking, setBooking] = useState(initialBooking);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<"CASH" | "ONLINE">("CASH");
   const [proofImage, setProofImage] = useState<File | null>(null);
@@ -75,6 +75,13 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
     setPreview(null);
     if (cameraInputRef.current) cameraInputRef.current.value = "";
     if (galleryInputRef.current) galleryInputRef.current.value = "";
+  }
+
+  async function refreshBooking() {
+    const res = await fetch(`/api/bookings/${booking.id}`);
+    if (res.ok) {
+      setBooking(await res.json());
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -121,8 +128,7 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
       setSuccess("Payment recorded successfully!");
       setAmount("");
       clearProofImage();
-      router.refresh();
-      window.location.reload();
+      await refreshBooking();
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setError("Request timed out — please try again with a smaller image");
@@ -309,9 +315,9 @@ export function PaymentEntryClient({ booking }: { booking: Booking }) {
                 </div>
                 <div className="text-right">
                   {verificationBadge(p.verificationStatus)}
-                  {p.proofImageUrl && (
+                  {(p.proofImageUrl || p.hasProof) && (
                     <a
-                      href={p.proofImageUrl}
+                      href={p.proofImageUrl || `/api/payments/${p.id}/proof`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-1 block text-xs text-blue-600"

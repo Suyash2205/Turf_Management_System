@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +13,7 @@ interface Payment {
   amount: number;
   method: string;
   proofImageUrl: string | null;
+  hasProof?: boolean;
   extractedSenderName: string | null;
   extractedAmount: number | null;
   verificationStatus: string;
@@ -37,8 +37,12 @@ interface Booking {
   payments: Payment[];
 }
 
-export function AdminBookingVerifyClient({ booking }: { booking: Booking }) {
-  const router = useRouter();
+export function AdminBookingVerifyClient({
+  booking: initialBooking,
+}: {
+  booking: Booking;
+}) {
+  const [booking, setBooking] = useState(initialBooking);
   const [verifying, setVerifying] = useState(false);
 
   const pendingPayments = booking.payments.filter(
@@ -48,15 +52,26 @@ export function AdminBookingVerifyClient({ booking }: { booking: Booking }) {
     (p) => p.verificationStatus !== "PENDING"
   );
 
-  async function verifyPayment(paymentId: string, status: "VERIFIED" | "REJECTED") {
+  async function refreshBooking() {
+    const res = await fetch(`/api/bookings/${booking.id}`);
+    if (res.ok) setBooking(await res.json());
+  }
+
+  async function verifyPayment(
+    paymentId: string,
+    status: "VERIFIED" | "REJECTED"
+  ) {
     setVerifying(true);
-    await fetch("/api/payments/verify", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentId, status }),
-    });
-    setVerifying(false);
-    router.refresh();
+    try {
+      await fetch("/api/payments/verify", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId, status }),
+      });
+      await refreshBooking();
+    } finally {
+      setVerifying(false);
+    }
   }
 
   return (
@@ -150,9 +165,9 @@ export function AdminBookingVerifyClient({ booking }: { booking: Booking }) {
                 </div>
                 <div className="text-right">
                   {verificationBadge(p.verificationStatus)}
-                  {p.proofImageUrl && (
+                  {(p.proofImageUrl || p.hasProof) && (
                     <a
-                      href={p.proofImageUrl}
+                      href={p.proofImageUrl || `/api/payments/${p.id}/proof`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-1 block text-xs text-blue-600"

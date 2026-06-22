@@ -27,7 +27,7 @@ export default async function AdminBookingVerifyPage({
 
   if (!booking) notFound();
 
-  const serialized = serializeBooking(booking);
+  const serialized = serializeBooking(booking, { pendingProofOnly: true });
 
   return (
     <div className="min-h-screen bg-slate-50">

@@ -15,12 +15,19 @@ export async function GET(
   const { id } = await params;
   const booking = await prisma.booking.findUnique({
     where: { id },
-    include: { payments: { orderBy: { createdAt: "desc" } } },
+    include: {
+      payments: {
+        orderBy: { createdAt: "desc" },
+        include: { recordedBy: { select: { name: true } } },
+      },
+    },
   });
 
   if (!booking) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json(serializeBooking(booking));
+  return NextResponse.json(
+    serializeBooking(booking, { pendingProofOnly: true })
+  );
 }

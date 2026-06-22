@@ -10,6 +10,7 @@ export interface VerifiablePayment {
   amount: number;
   method: string;
   proofImageUrl: string | null;
+  hasProof?: boolean;
   extractedSenderName: string | null;
   extractedAmount: number | null;
   verificationStatus: string;
@@ -44,7 +45,7 @@ export function PaymentVerificationPanel({
             {payment.extractedAmount && ` · ${formatCurrency(payment.extractedAmount)}`}
           </p>
         )}
-        {payment.proofImageUrl && (
+        {payment.proofImageUrl ? (
           <a
             href={payment.proofImageUrl}
             target="_blank"
@@ -57,7 +58,16 @@ export function PaymentVerificationPanel({
               className="mt-2 max-h-48 rounded-lg border"
             />
           </a>
-        )}
+        ) : payment.hasProof ? (
+          <a
+            href={`/api/payments/${payment.id}/proof`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-block text-sm text-blue-600"
+          >
+            View payment proof
+          </a>
+        ) : null}
       </div>
       {payment.verificationStatus === "PENDING" && (
         <div className="flex gap-2">

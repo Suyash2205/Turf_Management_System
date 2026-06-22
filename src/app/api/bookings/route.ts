@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { serializeBooking } from "@/lib/bookings";
+import { serializeBookingListItem } from "@/lib/bookings";
 import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET(request: Request) {
@@ -35,11 +35,25 @@ export async function GET(request: Request) {
 
   const bookings = await prisma.booking.findMany({
     where,
-    include: { payments: { orderBy: { createdAt: "desc" } } },
-    orderBy: [{ bookingDate: "desc" }, { createdAt: "desc" }],
+    orderBy: [{ bookingDate: "desc" }, { startTime: "asc" }],
+    select: {
+      id: true,
+      customerName: true,
+      customerPhone: true,
+      bookingDate: true,
+      startTime: true,
+      endTime: true,
+      turfName: true,
+      totalAmount: true,
+      paymentStatus: true,
+      paidOnKhelomore: true,
+      payments: {
+        select: { amount: true, verificationStatus: true },
+      },
+    },
   });
 
-  return NextResponse.json(bookings.map(serializeBooking));
+  return NextResponse.json(bookings.map(serializeBookingListItem));
 }
 
 export async function POST(request: Request) {
@@ -60,8 +74,10 @@ export async function POST(request: Request) {
       paidOnKhelomore: body.paidOnKhelomore ?? false,
       paymentStatus: body.paidOnKhelomore ? "COMPLETED" : "PENDING",
     },
-    include: { payments: true },
+    include: {
+      payments: { select: { amount: true, verificationStatus: true } },
+    },
   });
 
-  return NextResponse.json(serializeBooking(booking), { status: 201 });
+  return NextResponse.json(serializeBookingListItem(booking), { status: 201 });
 }

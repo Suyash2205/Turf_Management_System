@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { matchBankTransactions } from "@/lib/bank-matcher";
 import { toNumber } from "@/lib/bookings";
 import {
   startOfDay,
@@ -22,20 +21,43 @@ export async function GET(request: Request) {
 
   const end = endOfDay(new Date());
   const start = startOfDay(subDays(new Date(), days - 1));
+  const todayStart = startOfDay(new Date());
+  const todayEnd = endOfDay(new Date());
 
-  const [bookings, payments, pendingVerifications] = await Promise.all([
-    prisma.booking.findMany({
+  const [
+    totalBookings,
+    completedBookings,
+    pendingPayments,
+    pendingVerifications,
+    payments,
+    bookingsByDay,
+  ] = await Promise.all([
+    prisma.booking.count({
       where: { bookingDate: { gte: start, lte: end } },
-      include: { payments: true },
+    }),
+    prisma.booking.count({
+      where: {
+        bookingDate: { gte: start, lte: end },
+        paymentStatus: "COMPLETED",
+      },
+    }),
+    prisma.booking.count({
+      where: {
+        bookingDate: { gte: start, lte: end },
+        paymentStatus: { in: ["PENDING", "PARTIAL"] },
+      },
+    }),
+    prisma.payment.count({
+      where: { verificationStatus: "PENDING" },
     }),
     prisma.payment.findMany({
       where: { createdAt: { gte: start, lte: end } },
+      select: { amount: true, method: true, createdAt: true },
     }),
-    prisma.payment.count({
-      where: {
-        verificationStatus: "PENDING",
-        method: "ONLINE",
-      },
+    prisma.booking.groupBy({
+      by: ["bookingDate"],
+      where: { bookingDate: { gte: start, lte: end } },
+      _count: { id: true },
     }),
   ]);
 
@@ -50,56 +72,49 @@ export async function GET(request: Request) {
     .filter((p) => p.method === "ONLINE")
     .reduce((sum, p) => sum + toNumber(p.amount), 0);
 
-  const pendingPayments = bookings.filter(
-    (b) => b.paymentStatus === "PENDING" || b.paymentStatus === "PARTIAL"
-  ).length;
+  const todayCollected = payments
+    .filter((p) => p.createdAt >= todayStart && p.createdAt <= todayEnd)
+    .reduce((sum, p) => sum + toNumber(p.amount), 0);
 
-  const todayStart = startOfDay(new Date());
-  const todayEnd = endOfDay(new Date());
-  const todayPayments = payments.filter(
-    (p) => p.createdAt >= todayStart && p.createdAt <= todayEnd
-  );
-  const todayCollected = todayPayments.reduce(
-    (sum, p) => sum + toNumber(p.amount),
-    0
+  const bookingsPerDay = new Map(
+    bookingsByDay.map((row) => [
+      format(startOfDay(row.bookingDate), "yyyy-MM-dd"),
+      row._count.id,
+    ])
   );
 
   const interval = eachDayOfInterval({ start, end });
   const dailyTrend = interval.map((day) => {
     const dayStart = startOfDay(day);
     const dayEnd = endOfDay(day);
+    const dayKey = format(day, "yyyy-MM-dd");
     const dayPayments = payments.filter(
       (p) => p.createdAt >= dayStart && p.createdAt <= dayEnd
     );
     return {
-      date: format(day, "yyyy-MM-dd"),
+      date: dayKey,
       label: format(day, "dd MMM"),
       collected: dayPayments.reduce((s, p) => s + toNumber(p.amount), 0),
-      bookings: bookings.filter(
-        (b) => b.bookingDate >= dayStart && b.bookingDate <= dayEnd
-      ).length,
+      bookings: bookingsPerDay.get(dayKey) ?? 0,
     };
   });
 
-  const paymentMethodSplit = [
-    { method: "Cash", amount: cashCollected },
-    { method: "Online", amount: onlineCollected },
-  ];
-
   return NextResponse.json({
     summary: {
-      totalBookings: bookings.length,
+      totalBookings,
       totalCollected,
       cashCollected,
       onlineCollected,
       todayCollected,
       pendingPayments,
       pendingVerifications,
-      completedBookings: bookings.filter((b) => b.paymentStatus === "COMPLETED")
-        .length,
+      completedBookings,
     },
     dailyTrend,
-    paymentMethodSplit,
+    paymentMethodSplit: [
+      { method: "Cash", amount: cashCollected },
+      { method: "Online", amount: onlineCollected },
+    ],
   });
 }
 
@@ -109,6 +124,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { matchBankTransactions } = await import("@/lib/bank-matcher");
   const { statementId } = await request.json();
   if (!statementId) {
     return NextResponse.json({ error: "Missing statementId" }, { status: 400 });
