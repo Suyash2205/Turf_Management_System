@@ -109,7 +109,7 @@ export function AdminBookingVerifyClient({
             <span className="font-semibold">{formatCurrency(booking.totalAmount)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-slate-500">Collected (verified)</span>
+            <span className="text-slate-500">Collected</span>
             <span className="font-semibold text-emerald-600">
               {formatCurrency(booking.paidAmount)}
             </span>
@@ -154,6 +154,10 @@ export function AdminBookingVerifyClient({
                 <PaymentHistoryItem
                   payment={p}
                   canEdit
+                  maxEditAmount={Math.max(
+                    0,
+                    booking.totalAmount - (booking.paidAmount - p.amount)
+                  )}
                   onUpdated={refreshBooking}
                 />
                 {p.verificationStatus === "PENDING" && (

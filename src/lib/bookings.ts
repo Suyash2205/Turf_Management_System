@@ -22,6 +22,31 @@ export function getVerifiedPaidAmount(
     .reduce((sum, p) => sum + toNumber(p.amount), 0);
 }
 
+/** Pending + verified payments (rejected entries are excluded). */
+export function getCollectedAmount(
+  payments: Pick<Payment, "amount" | "verificationStatus">[]
+) {
+  return payments
+    .filter((p) => p.verificationStatus !== VerificationStatus.REJECTED)
+    .reduce((sum, p) => sum + toNumber(p.amount), 0);
+}
+
+export function getRemainingBalance(
+  booking: Pick<Booking, "totalAmount">,
+  payments: Pick<Payment, "id" | "amount" | "verificationStatus">[],
+  excludePaymentId?: string
+) {
+  const collected = payments
+    .filter(
+      (p) =>
+        p.verificationStatus !== VerificationStatus.REJECTED &&
+        p.id !== excludePaymentId
+    )
+    .reduce((sum, p) => sum + toNumber(p.amount), 0);
+
+  return Math.max(0, toNumber(booking.totalAmount) - collected);
+}
+
 export function hasRejectedPayments(
   payments: Pick<Payment, "verificationStatus">[]
 ) {
@@ -33,14 +58,17 @@ export function hasRejectedPayments(
 export function getPaidAmount(
   payments: Pick<Payment, "amount" | "verificationStatus">[]
 ) {
-  return getVerifiedPaidAmount(payments);
+  return getCollectedAmount(payments);
 }
 
 export function getPendingAmount(
   booking: Pick<Booking, "totalAmount">,
   payments: Pick<Payment, "amount" | "verificationStatus">[]
 ) {
-  return Math.max(0, toNumber(booking.totalAmount) - getVerifiedPaidAmount(payments));
+  return Math.max(
+    0,
+    toNumber(booking.totalAmount) - getCollectedAmount(payments)
+  );
 }
 
 export async function recalculateBookingStatus(bookingId: string) {

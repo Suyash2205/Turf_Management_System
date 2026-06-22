@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { recalculateBookingStatus } from "@/lib/bookings";
+import { recalculateBookingStatus, getRemainingBalance } from "@/lib/bookings";
 import { canDeletePayment, canModifyPayment } from "@/lib/payment-access";
 import { extractPaymentFromImage } from "@/lib/ocr";
 import { PaymentMethod, VerificationStatus } from "@prisma/client";
@@ -69,6 +69,33 @@ export async function PATCH(
       if (!Number.isFinite(amount) || amount <= 0) {
         return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
       }
+
+      const booking = await prisma.booking.findUnique({
+        where: { id: existing.bookingId },
+        include: {
+          payments: {
+            select: { id: true, amount: true, verificationStatus: true },
+          },
+        },
+      });
+      if (!booking) {
+        return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+      }
+
+      const remaining = getRemainingBalance(
+        booking,
+        booking.payments,
+        existing.id
+      );
+      if (amount > remaining) {
+        return NextResponse.json(
+          {
+            error: `Amount cannot exceed remaining balance of ₹${remaining.toLocaleString("en-IN")}`,
+          },
+          { status: 400 }
+        );
+      }
+
       data.amount = amount;
     }
 

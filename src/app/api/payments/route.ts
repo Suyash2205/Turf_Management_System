@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { recalculateBookingStatus } from "@/lib/bookings";
+import { recalculateBookingStatus, getRemainingBalance } from "@/lib/bookings";
 import { extractPaymentFromImage } from "@/lib/ocr";
 import { PaymentMethod, VerificationStatus } from "@prisma/client";
 
@@ -37,9 +37,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        payments: { select: { id: true, amount: true, verificationStatus: true } },
+      },
+    });
     if (!booking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
+    }
+
+    const remaining = getRemainingBalance(booking, booking.payments);
+    if (amount > remaining) {
+      return NextResponse.json(
+        {
+          error: `Amount cannot exceed remaining balance of ₹${remaining.toLocaleString("en-IN")}`,
+        },
+        { status: 400 }
+      );
     }
 
     let proofImageUrl: string | undefined;

@@ -68,6 +68,16 @@ export function PaymentRecordForm({
         return;
       }
 
+      const parsedAmount = parseFloat(amount);
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        setError("Enter a valid amount");
+        return;
+      }
+      if (parsedAmount > maxAmount) {
+        setError(`Amount cannot exceed ₹${maxAmount.toLocaleString("en-IN")}`);
+        return;
+      }
+
       const formData = new FormData();
       formData.append("bookingId", bookingId);
       formData.append("amount", amount);
@@ -119,10 +129,11 @@ export function PaymentRecordForm({
         <Input
           type="number"
           min="1"
+          max={maxAmount}
           step="1"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder={`Max ${maxAmount}`}
+          placeholder={`Max ${maxAmount.toLocaleString("en-IN")}`}
           required
         />
       </div>

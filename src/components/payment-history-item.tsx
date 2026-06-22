@@ -23,12 +23,14 @@ export interface PaymentHistoryEntry {
 interface PaymentHistoryItemProps {
   payment: PaymentHistoryEntry;
   canEdit: boolean;
+  maxEditAmount: number;
   onUpdated: () => void | Promise<void>;
 }
 
 export function PaymentHistoryItem({
   payment,
   canEdit,
+  maxEditAmount,
   onUpdated,
 }: PaymentHistoryItemProps) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -72,6 +74,18 @@ export function PaymentHistoryItem({
     setError("");
 
     try {
+      const parsedAmount = parseFloat(amount);
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        setError("Enter a valid amount");
+        return;
+      }
+      if (parsedAmount > maxEditAmount) {
+        setError(
+          `Amount cannot exceed ₹${maxEditAmount.toLocaleString("en-IN")}`
+        );
+        return;
+      }
+
       const formData = new FormData();
       formData.append("amount", amount);
       formData.append("method", method);
@@ -129,9 +143,11 @@ export function PaymentHistoryItem({
           <Input
             type="number"
             min="1"
+            max={maxEditAmount}
             step="1"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+            placeholder={`Max ${maxEditAmount.toLocaleString("en-IN")}`}
             required
           />
         </div>
@@ -203,7 +219,10 @@ export function PaymentHistoryItem({
   return (
     <div className="flex items-start justify-between rounded-lg border border-slate-100 p-3">
       <div>
-        <p className="font-medium">{formatCurrency(payment.amount)}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-medium">{formatCurrency(payment.amount)}</p>
+          {verificationBadge(payment.verificationStatus)}
+        </div>
         <p className="text-sm text-slate-500">
           {payment.method === "CASH" ? "Cash" : "Online"}
         </p>
@@ -216,7 +235,6 @@ export function PaymentHistoryItem({
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>
       <div className="text-right">
-        {verificationBadge(payment.verificationStatus)}
         {(payment.hasProof || payment.proofImageUrl) && (
           <a
             href={paymentProofUrl(payment.id)}

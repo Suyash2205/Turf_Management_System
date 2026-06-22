@@ -77,7 +77,7 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
             <span className="font-semibold">{formatCurrency(booking.totalAmount)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-slate-500">Collected (verified)</span>
+            <span className="text-slate-500">Collected</span>
             <span className="font-semibold text-emerald-600">
               {formatCurrency(booking.paidAmount)}
             </span>
@@ -122,6 +122,10 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
                 key={p.id}
                 payment={p}
                 canEdit={p.verificationStatus !== "VERIFIED"}
+                maxEditAmount={Math.max(
+                  0,
+                  booking.totalAmount - (booking.paidAmount - p.amount)
+                )}
                 onUpdated={refreshBooking}
               />
             ))}
