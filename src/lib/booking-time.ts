@@ -24,3 +24,11 @@ export function addHoursToTime(time: string, hours: number): string | null {
   const added = Math.round(hours * 60);
   return formatMinutesToTime(base + added);
 }
+
+/** Subtract fractional hours from a "HH:mm" time string. */
+export function subtractHoursFromTime(time: string, hours: number): string | null {
+  const base = parseTimeToMinutes(time);
+  if (base == null || !Number.isFinite(hours) || hours <= 0) return null;
+  const removed = Math.round(hours * 60);
+  return formatMinutesToTime(base - removed);
+}

@@ -68,6 +68,7 @@ model Booking {
   bookingDate     DateTime
   startTime       String?
   endTime         String?
+  slotEndTime     String?
   totalAmount     Decimal              @db.Decimal(10, 2)
   slotPrice       Decimal?             @db.Decimal(10, 2)
   couponAmount    Decimal?             @db.Decimal(10, 2)

@@ -146,9 +146,12 @@ export function AdminBookingVerifyClient({
       </Card>
 
       <BookingAdjustmentsList
+        bookingId={booking.id}
         adjustments={booking.adjustments ?? []}
         baseAmount={booking.baseAmount ?? booking.totalAmount}
         totalAmount={booking.totalAmount}
+        canEdit={!booking.paidOnKhelomore}
+        onUpdated={applyBooking}
       />
 
       {showRecordForm && (

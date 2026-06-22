@@ -111,9 +111,12 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
       </Card>
 
       <BookingAdjustmentsList
+        bookingId={booking.id}
         adjustments={booking.adjustments}
         baseAmount={booking.baseAmount}
         totalAmount={booking.totalAmount}
+        canEdit={canAddExtras}
+        onUpdated={applyBooking}
       />
 
       {canAddExtras && (

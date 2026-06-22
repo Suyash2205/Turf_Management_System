@@ -3,10 +3,10 @@ import { BookingAdjustmentType } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
-  fetchSerializedBooking,
-  recalculateAndSerializeBooking,
-  toNumber,
-} from "@/lib/bookings";
+  ensureSlotEndTime,
+  syncBookingAfterAdjustmentChange,
+} from "@/lib/booking-adjustments";
+import { fetchSerializedBooking } from "@/lib/bookings";
 import { addHoursToTime } from "@/lib/booking-time";
 
 export async function POST(
@@ -57,7 +57,13 @@ export async function POST(
       return NextResponse.json({ error: "Booking not found" }, { status: 404 });
     }
 
-    let newEndTime: string | undefined;
+    if (booking.paidOnKhelomore) {
+      return NextResponse.json(
+        { error: "Cannot add extras to Khelomore-paid bookings" },
+        { status: 403 }
+      );
+    }
+
     if (type === BookingAdjustmentType.EXTRA_HOURS) {
       const baseTime = booking.endTime || booking.startTime;
       if (!baseTime) {
@@ -70,34 +76,24 @@ export async function POST(
       if (!extended) {
         return NextResponse.json({ error: "Invalid booking time" }, { status: 400 });
       }
-      newEndTime = extended;
+      await ensureSlotEndTime(bookingId, booking.endTime);
     }
 
-    const currentTotal = toNumber(booking.totalAmount);
-    const nextTotal = currentTotal + amount;
-
-    await prisma.$transaction(async (tx) => {
-      await tx.bookingAdjustment.create({
-        data: {
-          bookingId,
-          type,
-          description,
-          amount,
-          hoursAdded: type === BookingAdjustmentType.EXTRA_HOURS ? hours : null,
-          addedById: session.user.id,
-        },
-      });
-
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: {
-          totalAmount: nextTotal,
-          ...(newEndTime ? { endTime: newEndTime } : {}),
-        },
-      });
+    await prisma.bookingAdjustment.create({
+      data: {
+        bookingId,
+        type,
+        description:
+          type === BookingAdjustmentType.EXTRA_HOURS
+            ? `Extra ${hours} hr${hours === 1 ? "" : "s"}`
+            : description,
+        amount,
+        hoursAdded: type === BookingAdjustmentType.EXTRA_HOURS ? hours : null,
+        addedById: session.user.id,
+      },
     });
 
-    const updatedBooking = await recalculateAndSerializeBooking(bookingId);
+    const updatedBooking = await syncBookingAfterAdjustmentChange(bookingId);
     return NextResponse.json({ booking: updatedBooking }, { status: 201 });
   } catch (error) {
     console.error("Booking adjustment error:", error);

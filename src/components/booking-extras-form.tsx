@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock, Package, Plus } from "lucide-react";
+import { Clock, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -314,14 +314,22 @@ interface BookingAdjustment {
 }
 
 export function BookingAdjustmentsList({
+  bookingId,
   adjustments,
   baseAmount,
   totalAmount,
+  canEdit = false,
+  onUpdated,
 }: {
+  bookingId: string;
   adjustments: BookingAdjustment[];
   baseAmount: number;
   totalAmount: number;
+  canEdit?: boolean;
+  onUpdated: (booking: Record<string, unknown>) => void | Promise<void>;
 }) {
+  const [message, setMessage] = useState("");
+
   if (adjustments.length === 0) return null;
 
   const extrasTotal = adjustments.reduce((sum, a) => sum + a.amount, 0);
@@ -331,23 +339,23 @@ export function BookingAdjustmentsList({
       <CardHeader>
         <CardTitle className="text-base">Booking breakdown</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm">
+      <CardContent className="space-y-3 text-sm">
         <div className="flex justify-between">
           <span className="text-slate-500">Slot / base</span>
           <span>{formatCurrency(baseAmount)}</span>
         </div>
         {adjustments.map((item) => (
-          <div key={item.id} className="flex justify-between gap-3">
-            <span className="text-slate-600">
-              {item.description}
-              {item.hoursAdded
-                ? ` (+${item.hoursAdded}h)`
-                : ""}
-            </span>
-            <span className="shrink-0 font-medium">
-              +{formatCurrency(item.amount)}
-            </span>
-          </div>
+          <BookingAdjustmentItem
+            key={item.id}
+            bookingId={bookingId}
+            adjustment={item}
+            canEdit={canEdit}
+            onUpdated={async (booking) => {
+              await onUpdated(booking);
+              setMessage("");
+            }}
+            onMessage={setMessage}
+          />
         ))}
         <div className="flex justify-between border-t pt-2 font-semibold">
           <span>Total</span>
@@ -358,7 +366,234 @@ export function BookingAdjustmentsList({
             {formatCurrency(extrasTotal)} added in extras &amp; extra hours
           </p>
         )}
+        {message && (
+          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+            {message}
+          </p>
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+function BookingAdjustmentItem({
+  bookingId,
+  adjustment,
+  canEdit,
+  onUpdated,
+  onMessage,
+}: {
+  bookingId: string;
+  adjustment: BookingAdjustment;
+  canEdit: boolean;
+  onUpdated: (booking: Record<string, unknown>) => void | Promise<void>;
+  onMessage: (message: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [description, setDescription] = useState(adjustment.description);
+  const [amount, setAmount] = useState(String(adjustment.amount));
+  const [hours, setHours] = useState(
+    adjustment.hoursAdded != null ? String(adjustment.hoursAdded) : "1"
+  );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const isHours = adjustment.type === "EXTRA_HOURS";
+
+  async function applyBookingResponse(res: Response) {
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Request failed");
+    }
+    if (data.booking) {
+      await onUpdated(data.booking);
+    }
+    return data.booking as { totalAmount: number; endTime?: string | null } | undefined;
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const parsedAmount = parseFloat(amount);
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        setError("Enter a valid amount");
+        return;
+      }
+
+      const body: Record<string, unknown> = {
+        amount: parsedAmount,
+      };
+
+      if (isHours) {
+        const parsedHours = parseFloat(hours);
+        if (!Number.isFinite(parsedHours) || parsedHours <= 0) {
+          setError("Enter valid extra hours");
+          return;
+        }
+        body.hours = parsedHours;
+      } else {
+        const desc = description.trim();
+        if (!desc) {
+          setError("Enter a description");
+          return;
+        }
+        body.description = desc;
+      }
+
+      const booking = await applyBookingResponse(
+        await fetch(
+          `/api/bookings/${bookingId}/adjustments/${adjustment.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }
+        )
+      );
+
+      setEditing(false);
+      onMessage(
+        booking
+          ? `Updated — new total: ${formatCurrency(booking.totalAmount)}`
+          : "Updated successfully."
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    const label = isHours ? "extra hours" : adjustment.description;
+    if (!confirm(`Remove ${label} (${formatCurrency(adjustment.amount)})?`)) {
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const booking = await applyBookingResponse(
+        await fetch(
+          `/api/bookings/${bookingId}/adjustments/${adjustment.id}`,
+          { method: "DELETE" }
+        )
+      );
+
+      onMessage(
+        booking
+          ? `Removed — new total: ${formatCurrency(booking.totalAmount)}`
+          : "Removed successfully."
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove");
+      setLoading(false);
+    }
+  }
+
+  if (editing) {
+    return (
+      <form
+        onSubmit={handleSave}
+        className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3"
+      >
+        {!isHours && (
+          <Input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Item name"
+            required
+          />
+        )}
+        {isHours && (
+          <Input
+            type="number"
+            min="0.5"
+            max="12"
+            step="0.5"
+            value={hours}
+            onChange={(e) => setHours(e.target.value)}
+            required
+          />
+        )}
+        <Input
+          type="number"
+          min="1"
+          step="1"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="Amount (₹)"
+          required
+        />
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" disabled={loading}>
+            {loading ? "Saving…" : "Save"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={loading}
+            onClick={() => {
+              setEditing(false);
+              setDescription(adjustment.description);
+              setAmount(String(adjustment.amount));
+              setHours(
+                adjustment.hoursAdded != null
+                  ? String(adjustment.hoursAdded)
+                  : "1"
+              );
+              setError("");
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-slate-600">
+          {adjustment.description}
+          {adjustment.hoursAdded ? ` (+${adjustment.hoursAdded}h)` : ""}
+        </span>
+        <span className="shrink-0 font-medium">
+          +{formatCurrency(adjustment.amount)}
+        </span>
+      </div>
+      {canEdit && (
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={loading}
+            onClick={() => setEditing(true)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={loading}
+            onClick={handleDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Remove
+          </Button>
+        </div>
+      )}
+      {error && !editing && <p className="text-xs text-red-600">{error}</p>}
+    </div>
   );
 }
