@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { useLoading } from "@/components/loading-provider";
+import { EmailSyncStatus } from "@/components/email-sync-status";
 
 interface DashboardData {
   summary: {
@@ -215,6 +216,7 @@ export function AdminDashboardClient() {
         <div>
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Dashboard</h1>
           <p className="text-sm text-slate-500">Last 30 days overview</p>
+          <EmailSyncStatus className="mt-1" />
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <Button variant="outline" onClick={loadDashboard} className="w-full sm:w-auto">

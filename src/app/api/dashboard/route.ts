@@ -9,6 +9,7 @@ import {
   format,
   eachDayOfInterval,
 } from "date-fns";
+import { getEmailSyncStatus } from "@/lib/email-sync-status";
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
     pendingVerifications,
     payments,
     bookingsByDay,
+    lastEmailSync,
   ] = await Promise.all([
     prisma.booking.count({
       where: { bookingDate: { gte: start, lte: end } },
@@ -59,6 +61,7 @@ export async function GET(request: Request) {
       where: { bookingDate: { gte: start, lte: end } },
       _count: { id: true },
     }),
+    getEmailSyncStatus(),
   ]);
 
   const totalCollected = payments.reduce(
@@ -115,6 +118,7 @@ export async function GET(request: Request) {
       { method: "Cash", amount: cashCollected },
       { method: "Online", amount: onlineCollected },
     ],
+    emailSync: lastEmailSync,
   });
 }
 

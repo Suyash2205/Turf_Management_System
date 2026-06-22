@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Badge, paymentStatusBadge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useLoading } from "@/components/loading-provider";
+import { EmailSyncStatus } from "@/components/email-sync-status";
 
 interface Booking {
   id: string;
@@ -78,6 +79,7 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
               ? "View bookings and verify payments"
               : "Collect and record payments"}
           </p>
+          {!isAdmin && <EmailSyncStatus className="mt-1" />}
         </div>
         <Button
           variant="outline"
