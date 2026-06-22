@@ -1,9 +1,15 @@
 import { google } from "googleapis";
 import { prisma } from "@/lib/db";
+import {
+  fetchMainSheetRows,
+  MAIN_SHEET_TITLE,
+  mainSheetValues,
+} from "@/lib/google-sheets-main";
 
 type Row = Record<string, unknown>;
 
 const TAB_ORDER = [
+  MAIN_SHEET_TITLE,
   "Users",
   "Bookings",
   "Payments",
@@ -62,6 +68,24 @@ async function ensureSheetsExist(
   });
 }
 
+async function writeSheetWithValues(
+  sheetsApi: ReturnType<typeof google.sheets>,
+  spreadsheetId: string,
+  title: string,
+  values: (string | number)[][]
+) {
+  await sheetsApi.spreadsheets.values.clear({
+    spreadsheetId,
+    range: `${title}!A:ZZ`,
+  });
+  await sheetsApi.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${title}!A1`,
+    valueInputOption: "RAW",
+    requestBody: { values },
+  });
+}
+
 async function writeSheet(
   sheetsApi: ReturnType<typeof google.sheets>,
   spreadsheetId: string,
@@ -105,6 +129,7 @@ export async function syncDatabaseToGoogleSheets() {
   await ensureSheetsExist(sheetsApi, spreadsheetId, TAB_ORDER);
 
   const [
+    mainSheetRows,
     users,
     bookings,
     payments,
@@ -114,6 +139,7 @@ export async function syncDatabaseToGoogleSheets() {
     auditLogs,
     emailSyncLogs,
   ] = await Promise.all([
+    fetchMainSheetRows(),
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
       select: {
@@ -135,6 +161,12 @@ export async function syncDatabaseToGoogleSheets() {
   ]);
 
   await Promise.all([
+    writeSheetWithValues(
+      sheetsApi,
+      spreadsheetId,
+      MAIN_SHEET_TITLE,
+      mainSheetValues(mainSheetRows)
+    ),
     writeSheet(sheetsApi, spreadsheetId, "Users", users),
     writeSheet(sheetsApi, spreadsheetId, "Bookings", bookings),
     writeSheet(sheetsApi, spreadsheetId, "Payments", payments),
@@ -164,6 +196,7 @@ export async function syncDatabaseToGoogleSheets() {
   return {
     spreadsheetId,
     counts: {
+      mainSheet: mainSheetRows.length,
       users: users.length,
       bookings: bookings.length,
       payments: payments.length,
