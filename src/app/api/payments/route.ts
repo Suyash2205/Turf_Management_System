@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { recalculateBookingStatus, getRemainingBalance } from "@/lib/bookings";
+import {
+  recalculateAndSerializeBooking,
+  getRemainingBalance,
+} from "@/lib/bookings";
 import { extractPaymentFromImage } from "@/lib/ocr";
 import { PaymentMethod, VerificationStatus } from "@prisma/client";
 
@@ -106,9 +109,9 @@ export async function POST(request: Request) {
       },
     });
 
-    await recalculateBookingStatus(bookingId);
+    const updatedBooking = await recalculateAndSerializeBooking(bookingId);
 
-    return NextResponse.json(payment, { status: 201 });
+    return NextResponse.json({ payment, booking: updatedBooking }, { status: 201 });
   } catch (error) {
     console.error("Payment error:", error);
     return NextResponse.json(

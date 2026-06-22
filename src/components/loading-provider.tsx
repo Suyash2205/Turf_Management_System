@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -14,6 +15,9 @@ type LoadingContextValue = {
 };
 
 const LoadingContext = createContext<LoadingContextValue | null>(null);
+
+/** Only show the full-screen overlay if work takes longer than this. */
+const OVERLAY_DELAY_MS = 400;
 
 export function LoadingProvider({ children }: { children: React.ReactNode }) {
   const [activeCount, setActiveCount] = useState(0);
@@ -33,7 +37,7 @@ export function LoadingProvider({ children }: { children: React.ReactNode }) {
   return (
     <LoadingContext.Provider value={{ isLoading: activeCount > 0, run }}>
       {children}
-      {activeCount > 0 && <LoadingOverlay />}
+      {activeCount > 0 && <DelayedLoadingOverlay />}
     </LoadingContext.Provider>
   );
 }
@@ -49,7 +53,16 @@ export function useLoading() {
   return ctx;
 }
 
-function LoadingOverlay() {
+function DelayedLoadingOverlay() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), OVERLAY_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!visible) return null;
+
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/25 backdrop-blur-[2px]"

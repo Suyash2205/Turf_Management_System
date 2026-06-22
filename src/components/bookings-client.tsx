@@ -79,25 +79,30 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
               : "Collect and record payments"}
           </p>
         </div>
-        <Button variant="outline" onClick={loadBookings} disabled={loading}>
+        <Button
+          variant="outline"
+          onClick={loadBookings}
+          disabled={loading}
+          className="w-full sm:w-auto"
+        >
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
         {!verifyFilter && (
           <Input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-auto"
+            className="w-full sm:w-auto"
           />
         )}
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm sm:w-auto"
         >
           <option value="">All statuses</option>
           <option value="PENDING">Pending</option>
@@ -108,7 +113,7 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
           <button
             type="button"
             onClick={() => setVerifyFilter((v) => !v)}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            className={`inline-flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors sm:w-auto ${
               verifyFilter
                 ? "border-purple-500 bg-purple-50 text-purple-700"
                 : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"

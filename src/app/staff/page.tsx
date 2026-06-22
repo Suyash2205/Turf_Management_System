@@ -1,18 +1,5 @@
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
-import { AppNav } from "@/components/app-nav";
 import { BookingsClient } from "@/components/bookings-client";
 
-export default async function StaffPage() {
-  const session = await auth();
-  if (!session) redirect("/login");
-
-  return (
-    <div className="min-h-screen bg-slate-50">
-      <AppNav role={session.user.role} userName={session.user.name} />
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <BookingsClient />
-      </main>
-    </div>
-  );
+export default function StaffPage() {
+  return <BookingsClient />;
 }

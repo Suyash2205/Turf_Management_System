@@ -9,7 +9,6 @@ import { PaymentHistoryItem } from "@/components/payment-history-item";
 import { canRecordPayment } from "@/lib/payment-access";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useState } from "react";
-import { useLoading } from "@/components/loading-provider";
 
 interface Payment {
   id: string;
@@ -40,15 +39,9 @@ interface Booking {
 
 export function PaymentEntryClient({ booking: initialBooking }: { booking: Booking }) {
   const [booking, setBooking] = useState(initialBooking);
-  const { run } = useLoading();
 
-  async function refreshBooking() {
-    await run(async () => {
-      const res = await fetch(`/api/bookings/${booking.id}`);
-      if (res.ok) {
-        setBooking(await res.json());
-      }
-    });
+  function applyBooking(updated: Record<string, unknown>) {
+    setBooking(updated as unknown as Booking);
   }
 
   const showRecordForm = canRecordPayment(booking);
@@ -109,7 +102,7 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
             <PaymentRecordForm
               bookingId={booking.id}
               maxAmount={booking.pendingAmount}
-              onSuccess={refreshBooking}
+              onSuccess={applyBooking}
             />
           </CardContent>
         </Card>
@@ -130,7 +123,7 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
                   0,
                   booking.totalAmount - (booking.paidAmount - p.amount)
                 )}
-                onUpdated={refreshBooking}
+                onUpdated={applyBooking}
               />
             ))}
           </CardContent>

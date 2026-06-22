@@ -50,14 +50,12 @@ export function VerificationClient() {
   async function verifyPayment(paymentId: string, status: "VERIFIED" | "REJECTED") {
     setVerifyingPaymentId(paymentId);
     try {
-      await run(async () => {
-        await fetch("/api/payments/verify", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paymentId, status }),
-        });
-        setPayments((prev) => prev.filter((p) => p.id !== paymentId));
+      await fetch("/api/payments/verify", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId, status }),
       });
+      setPayments((prev) => prev.filter((p) => p.id !== paymentId));
     } finally {
       setVerifyingPaymentId(null);
     }

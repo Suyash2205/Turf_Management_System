@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { recalculateBookingStatus, getRemainingBalance } from "@/lib/bookings";
+import {
+  recalculateAndSerializeBooking,
+  getRemainingBalance,
+} from "@/lib/bookings";
 import { canDeletePayment, canModifyPayment } from "@/lib/payment-access";
 import { extractPaymentFromImage } from "@/lib/ocr";
 import { PaymentMethod, VerificationStatus } from "@prisma/client";
@@ -141,9 +144,9 @@ export async function PATCH(
       data,
     });
 
-    await recalculateBookingStatus(payment.bookingId);
+    const booking = await recalculateAndSerializeBooking(payment.bookingId);
 
-    return NextResponse.json(payment);
+    return NextResponse.json({ payment, booking });
   } catch (error) {
     console.error("Payment update error:", error);
     return NextResponse.json(
@@ -176,7 +179,7 @@ export async function DELETE(
   }
 
   await prisma.payment.delete({ where: { id } });
-  await recalculateBookingStatus(existing.bookingId);
+  const booking = await recalculateAndSerializeBooking(existing.bookingId);
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, booking });
 }

@@ -5,12 +5,11 @@ import { Camera, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { compressImage } from "@/lib/compress-image";
-import { useLoading } from "@/components/loading-provider";
 
 interface PaymentRecordFormProps {
   bookingId: string;
   maxAmount: number;
-  onSuccess: () => void | Promise<void>;
+  onSuccess: (booking: Record<string, unknown>) => void | Promise<void>;
   submitLabel?: string;
 }
 
@@ -30,7 +29,6 @@ export function PaymentRecordForm({
   const [compressing, setCompressing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const { run } = useLoading();
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -80,41 +78,41 @@ export function PaymentRecordForm({
         return;
       }
 
-      await run(async () => {
-        const formData = new FormData();
-        formData.append("bookingId", bookingId);
-        formData.append("amount", amount);
-        formData.append("method", method);
-        if (proofImage) formData.append("proofImage", proofImage);
+      const formData = new FormData();
+      formData.append("bookingId", bookingId);
+      formData.append("amount", amount);
+      formData.append("method", method);
+      if (proofImage) formData.append("proofImage", proofImage);
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 90000);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 90000);
 
-        const res = await fetch("/api/payments", {
-          method: "POST",
-          body: formData,
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-
-        const text = await res.text();
-        let data: { error?: string };
-        try {
-          data = JSON.parse(text);
-        } catch {
-          throw new Error("Server error — please try again");
-        }
-
-        if (!res.ok) {
-          setError(data.error || "Failed to record payment");
-          return;
-        }
-
-        setSuccess("Payment recorded successfully!");
-        setAmount("");
-        clearProofImage();
-        await onSuccess();
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
+
+      const text = await res.text();
+      let data: { error?: string; booking?: Record<string, unknown> };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Server error — please try again");
+      }
+
+      if (!res.ok) {
+        setError(data.error || "Failed to record payment");
+        return;
+      }
+
+      setSuccess("Payment recorded successfully!");
+      setAmount("");
+      clearProofImage();
+      if (data.booking) {
+        await onSuccess(data.booking);
+      }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setError("Request timed out — please try again with a smaller image");

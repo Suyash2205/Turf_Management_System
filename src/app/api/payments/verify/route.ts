@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { recalculateBookingStatus } from "@/lib/bookings";
+import { recalculateAndSerializeBooking } from "@/lib/bookings";
 import { VerificationStatus } from "@prisma/client";
 
 export async function PATCH(request: Request) {
@@ -24,7 +24,7 @@ export async function PATCH(request: Request) {
     },
   });
 
-  await recalculateBookingStatus(payment.bookingId);
+  const booking = await recalculateAndSerializeBooking(payment.bookingId);
 
-  return NextResponse.json(payment);
+  return NextResponse.json({ payment, booking });
 }

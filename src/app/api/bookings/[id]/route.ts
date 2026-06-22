@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-import { serializeBooking } from "@/lib/bookings";
+import { fetchSerializedBooking } from "@/lib/bookings";
 
 export async function GET(
   _request: Request,
@@ -13,21 +12,11 @@ export async function GET(
   }
 
   const { id } = await params;
-  const booking = await prisma.booking.findUnique({
-    where: { id },
-    include: {
-      payments: {
-        orderBy: { createdAt: "desc" },
-        include: { recordedBy: { select: { name: true } } },
-      },
-    },
-  });
+  const booking = await fetchSerializedBooking(id);
 
   if (!booking) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json(
-    serializeBooking(booking, { pendingProofOnly: true })
-  );
+  return NextResponse.json(booking);
 }

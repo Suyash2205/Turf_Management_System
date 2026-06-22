@@ -42,13 +42,15 @@ function StatCard({
 }) {
   return (
     <Card>
-      <CardContent className="flex items-center gap-4 p-5">
-        <div className={`rounded-xl p-3 ${color}`}>
-          <Icon className="h-6 w-6 text-white" />
+      <CardContent className="flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
+        <div className={`shrink-0 rounded-xl p-2.5 sm:p-3 ${color}`}>
+          <Icon className="h-5 w-5 text-white sm:h-6 sm:w-6" />
         </div>
-        <div>
-          <p className="text-sm text-slate-500">{title}</p>
-          <p className="text-2xl font-bold text-slate-900">{value}</p>
+        <div className="min-w-0">
+          <p className="text-xs text-slate-500 sm:text-sm">{title}</p>
+          <p className="truncate text-lg font-bold text-slate-900 sm:text-2xl">
+            {value}
+          </p>
         </div>
       </CardContent>
     </Card>
@@ -211,19 +213,28 @@ export function AdminDashboardClient() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+          <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Dashboard</h1>
           <p className="text-sm text-slate-500">Last 30 days overview</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={loadDashboard}>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <Button variant="outline" onClick={loadDashboard} className="w-full sm:w-auto">
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button onClick={() => syncEmails(false)} disabled={syncing}>
+          <Button
+            onClick={() => syncEmails(false)}
+            disabled={syncing}
+            className="w-full sm:w-auto"
+          >
             <Mail className="h-4 w-4" />
             {syncing ? "Syncing..." : "Sync Recent"}
           </Button>
-          <Button variant="secondary" onClick={() => syncEmails(true)} disabled={syncing}>
+          <Button
+            variant="secondary"
+            onClick={() => syncEmails(true)}
+            disabled={syncing}
+            className="col-span-2 w-full sm:col-auto sm:w-auto"
+          >
             <Mail className="h-4 w-4" />
             {syncing ? "Syncing..." : "Full Sync (30 days)"}
           </Button>
@@ -236,7 +247,7 @@ export function AdminDashboardClient() {
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
           title="Today's Collection"
           value={formatCurrency(summary.todayCollected)}
@@ -322,7 +333,7 @@ export function AdminDashboardClient() {
         </Card>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <Card>
           <CardContent className="p-5 text-center">
             <p className="text-3xl font-bold text-emerald-600">

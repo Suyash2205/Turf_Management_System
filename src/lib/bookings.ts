@@ -71,6 +71,25 @@ export function getPendingAmount(
   );
 }
 
+const bookingWithPaymentsInclude = {
+  payments: {
+    orderBy: { createdAt: "desc" as const },
+    include: { recordedBy: { select: { name: true } } },
+  },
+};
+
+export async function fetchSerializedBooking(
+  bookingId: string,
+  options?: SerializeOptions
+) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: bookingWithPaymentsInclude,
+  });
+  if (!booking) return null;
+  return serializeBooking(booking, { pendingProofOnly: true, ...options });
+}
+
 export async function recalculateBookingStatus(bookingId: string) {
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
@@ -102,6 +121,14 @@ export async function recalculateBookingStatus(bookingId: string) {
     where: { id: bookingId },
     data: { paymentStatus },
   });
+}
+
+export async function recalculateAndSerializeBooking(
+  bookingId: string,
+  options?: SerializeOptions
+) {
+  await recalculateBookingStatus(bookingId);
+  return fetchSerializedBooking(bookingId, options);
 }
 
 export function getDefaultVerificationStatus(method: PaymentMethod) {

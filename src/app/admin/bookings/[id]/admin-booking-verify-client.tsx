@@ -11,7 +11,6 @@ import { PaymentHistoryItem } from "@/components/payment-history-item";
 import { canRecordPayment } from "@/lib/payment-access";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Check, X } from "lucide-react";
-import { useLoading } from "@/components/loading-provider";
 
 interface Payment {
   id: string;
@@ -51,13 +50,9 @@ export function AdminBookingVerifyClient({
   const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(
     null
   );
-  const { run } = useLoading();
 
-  async function refreshBooking() {
-    await run(async () => {
-      const res = await fetch(`/api/bookings/${booking.id}`);
-      if (res.ok) setBooking(await res.json());
-    });
+  function applyBooking(updated: Record<string, unknown>) {
+    setBooking(updated as unknown as Booking);
   }
 
   async function verifyPayment(
@@ -66,15 +61,15 @@ export function AdminBookingVerifyClient({
   ) {
     setVerifyingPaymentId(paymentId);
     try {
-      await run(async () => {
-        await fetch("/api/payments/verify", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paymentId, status }),
-        });
-        const res = await fetch(`/api/bookings/${booking.id}`);
-        if (res.ok) setBooking(await res.json());
+      const res = await fetch("/api/payments/verify", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId, status }),
       });
+      const data = await res.json();
+      if (res.ok && data.booking) {
+        setBooking(data.booking);
+      }
     } finally {
       setVerifyingPaymentId(null);
     }
@@ -144,7 +139,7 @@ export function AdminBookingVerifyClient({
             <PaymentRecordForm
               bookingId={booking.id}
               maxAmount={booking.pendingAmount}
-              onSuccess={refreshBooking}
+              onSuccess={applyBooking}
             />
           </CardContent>
         </Card>
@@ -165,7 +160,7 @@ export function AdminBookingVerifyClient({
                     0,
                     booking.totalAmount - (booking.paidAmount - p.amount)
                   )}
-                  onUpdated={refreshBooking}
+                  onUpdated={applyBooking}
                 />
                 {p.verificationStatus === "PENDING" && (
                   <div className="flex justify-end gap-2">

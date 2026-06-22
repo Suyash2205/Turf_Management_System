@@ -8,7 +8,6 @@ import { verificationBadge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { paymentProofUrl } from "@/lib/payment-proof";
 import { compressImage } from "@/lib/compress-image";
-import { useLoading } from "@/components/loading-provider";
 
 export interface PaymentHistoryEntry {
   id: string;
@@ -25,7 +24,7 @@ interface PaymentHistoryItemProps {
   payment: PaymentHistoryEntry;
   canEdit: boolean;
   maxEditAmount: number;
-  onUpdated: () => void | Promise<void>;
+  onUpdated: (booking: Record<string, unknown>) => void | Promise<void>;
 }
 
 export function PaymentHistoryItem({
@@ -45,7 +44,6 @@ export function PaymentHistoryItem({
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const { run } = useLoading();
 
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -88,25 +86,25 @@ export function PaymentHistoryItem({
         return;
       }
 
-      await run(async () => {
-        const formData = new FormData();
-        formData.append("amount", amount);
-        formData.append("method", method);
-        if (proofImage) formData.append("proofImage", proofImage);
+      const formData = new FormData();
+      formData.append("amount", amount);
+      formData.append("method", method);
+      if (proofImage) formData.append("proofImage", proofImage);
 
-        const res = await fetch(`/api/payments/${payment.id}`, {
-          method: "PATCH",
-          body: formData,
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error || "Failed to update payment");
-          return;
-        }
-
-        resetEditState();
-        await onUpdated();
+      const res = await fetch(`/api/payments/${payment.id}`, {
+        method: "PATCH",
+        body: formData,
       });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to update payment");
+        return;
+      }
+
+      resetEditState();
+      if (data.booking) {
+        await onUpdated(data.booking);
+      }
     } catch {
       setError("Failed to update payment");
     } finally {
@@ -120,17 +118,17 @@ export function PaymentHistoryItem({
     setLoading(true);
     setError("");
     try {
-      await run(async () => {
-        const res = await fetch(`/api/payments/${payment.id}`, {
-          method: "DELETE",
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error || "Failed to delete payment");
-          return;
-        }
-        await onUpdated();
+      const res = await fetch(`/api/payments/${payment.id}`, {
+        method: "DELETE",
       });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to delete payment");
+        return;
+      }
+      if (data.booking) {
+        await onUpdated(data.booking);
+      }
     } catch {
       setError("Failed to delete payment");
     } finally {
