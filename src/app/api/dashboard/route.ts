@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     prisma.booking.count({
       where: {
         bookingDate: { gte: start, lte: end },
-        paymentStatus: { in: ["PENDING", "PARTIAL"] },
+        paymentStatus: { in: ["PENDING", "PARTIAL", "REJECTED"] },
       },
     }),
     prisma.payment.count({

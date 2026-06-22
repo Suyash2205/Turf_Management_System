@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { recalculateBookingStatus } from "@/lib/bookings";
 import { VerificationStatus } from "@prisma/client";
 
 export async function PATCH(request: Request) {
@@ -22,6 +23,8 @@ export async function PATCH(request: Request) {
       verifiedAt: status === "VERIFIED" ? new Date() : null,
     },
   });
+
+  await recalculateBookingStatus(payment.bookingId);
 
   return NextResponse.json(payment);
 }

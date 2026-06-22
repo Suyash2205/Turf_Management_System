@@ -12,6 +12,7 @@
     "db:push": "prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
     "migrate:proofs": "npx tsx scripts/migrate-proofs-to-blob.ts",
+    "recalculate:statuses": "npx tsx scripts/recalculate-booking-statuses.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

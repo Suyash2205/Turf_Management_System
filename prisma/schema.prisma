@@ -28,6 +28,7 @@ enum BookingPaymentStatus {
   PENDING
   PARTIAL
   COMPLETED
+  REJECTED
 }
 
 enum MatchStatus {

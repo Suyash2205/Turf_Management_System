@@ -14,37 +14,57 @@ export function toNumber(value: Decimal | number | string | null | undefined) {
   return typeof value === "number" ? value : parseFloat(value.toString());
 }
 
-export function getPaidAmount(payments: Pick<Payment, "amount">[]) {
-  return payments.reduce((sum, p) => sum + toNumber(p.amount), 0);
+export function getVerifiedPaidAmount(
+  payments: Pick<Payment, "amount" | "verificationStatus">[]
+) {
+  return payments
+    .filter((p) => p.verificationStatus === VerificationStatus.VERIFIED)
+    .reduce((sum, p) => sum + toNumber(p.amount), 0);
+}
+
+export function hasRejectedPayments(
+  payments: Pick<Payment, "verificationStatus">[]
+) {
+  return payments.some(
+    (p) => p.verificationStatus === VerificationStatus.REJECTED
+  );
+}
+
+export function getPaidAmount(
+  payments: Pick<Payment, "amount" | "verificationStatus">[]
+) {
+  return getVerifiedPaidAmount(payments);
 }
 
 export function getPendingAmount(
   booking: Pick<Booking, "totalAmount">,
-  payments: Pick<Payment, "amount">[]
+  payments: Pick<Payment, "amount" | "verificationStatus">[]
 ) {
-  return Math.max(0, toNumber(booking.totalAmount) - getPaidAmount(payments));
+  return Math.max(0, toNumber(booking.totalAmount) - getVerifiedPaidAmount(payments));
 }
 
 export async function recalculateBookingStatus(bookingId: string) {
-  const [booking, agg] = await Promise.all([
-    prisma.booking.findUnique({
-      where: { id: bookingId },
-      select: { totalAmount: true, paidOnKhelomore: true },
-    }),
-    prisma.payment.aggregate({
-      where: { bookingId },
-      _sum: { amount: true },
-    }),
-  ]);
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      payments: { select: { amount: true, verificationStatus: true } },
+    },
+  });
   if (!booking) return;
 
   const total = toNumber(booking.totalAmount);
-  const paid = toNumber(agg._sum.amount);
+  const verifiedPaid = getVerifiedPaidAmount(booking.payments);
+  const rejected = hasRejectedPayments(booking.payments);
+  const awaitingVerification = booking.payments.some(
+    (p) => p.verificationStatus === VerificationStatus.PENDING
+  );
 
   let paymentStatus: BookingPaymentStatus;
-  if (booking.paidOnKhelomore || paid >= total) {
+  if (booking.paidOnKhelomore || verifiedPaid >= total) {
     paymentStatus = BookingPaymentStatus.COMPLETED;
-  } else if (paid > 0) {
+  } else if (rejected && verifiedPaid < total) {
+    paymentStatus = BookingPaymentStatus.REJECTED;
+  } else if (verifiedPaid > 0 || awaitingVerification) {
     paymentStatus = BookingPaymentStatus.PARTIAL;
   } else {
     paymentStatus = BookingPaymentStatus.PENDING;

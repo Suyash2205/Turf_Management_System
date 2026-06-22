@@ -4,10 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { paymentStatusBadge, verificationBadge } from "@/components/ui/badge";
-import { PaymentVerificationPanel } from "@/components/payment-verification-panel";
+import { Button } from "@/components/ui/button";
+import { paymentStatusBadge } from "@/components/ui/badge";
+import { PaymentRecordForm } from "@/components/payment-record-form";
+import { PaymentHistoryItem } from "@/components/payment-history-item";
+import { canRecordPayment } from "@/lib/payment-access";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { paymentProofUrl } from "@/lib/payment-proof";
+import { Check, X } from "lucide-react";
 
 interface Payment {
   id: string;
@@ -48,13 +51,6 @@ export function AdminBookingVerifyClient({
     null
   );
 
-  const pendingPayments = booking.payments.filter(
-    (p) => p.verificationStatus === "PENDING"
-  );
-  const otherPayments = booking.payments.filter(
-    (p) => p.verificationStatus !== "PENDING"
-  );
-
   async function refreshBooking() {
     const res = await fetch(`/api/bookings/${booking.id}`);
     if (res.ok) setBooking(await res.json());
@@ -76,6 +72,8 @@ export function AdminBookingVerifyClient({
       setVerifyingPaymentId(null);
     }
   }
+
+  const showRecordForm = canRecordPayment(booking);
 
   return (
     <div className="space-y-4">
@@ -111,7 +109,7 @@ export function AdminBookingVerifyClient({
             <span className="font-semibold">{formatCurrency(booking.totalAmount)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-slate-500">Collected</span>
+            <span className="text-slate-500">Collected (verified)</span>
             <span className="font-semibold text-emerald-600">
               {formatCurrency(booking.paidAmount)}
             </span>
@@ -122,63 +120,63 @@ export function AdminBookingVerifyClient({
               {formatCurrency(booking.pendingAmount)}
             </span>
           </div>
+          {booking.paymentStatus === "REJECTED" && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              Payment was rejected. Staff or admin can record payment again below.
+            </p>
+          )}
         </CardContent>
       </Card>
 
-      {pendingPayments.length > 0 ? (
+      {showRecordForm && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Verify Payment</CardTitle>
+            <CardTitle className="text-base">Record Payment</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {pendingPayments.map((payment) => (
-              <PaymentVerificationPanel
-                key={payment.id}
-                payment={payment}
-                onVerify={verifyPayment}
-                verifying={verifyingPaymentId === payment.id}
-              />
-            ))}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="py-8 text-center text-slate-500">
-            No pending payments to verify for this booking.
+          <CardContent>
+            <PaymentRecordForm
+              bookingId={booking.id}
+              maxAmount={booking.pendingAmount}
+              onSuccess={refreshBooking}
+            />
           </CardContent>
         </Card>
       )}
 
-      {otherPayments.length > 0 && (
+      {booking.payments.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Payment History</CardTitle>
+            <CardTitle className="text-base">Payments</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {otherPayments.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-start justify-between rounded-lg border border-slate-100 p-3"
-              >
-                <div>
-                  <p className="font-medium">{formatCurrency(p.amount)}</p>
-                  <p className="text-sm text-slate-500">
-                    {p.method === "CASH" ? "Cash" : "Online"}
-                  </p>
-                </div>
-                <div className="text-right">
-                  {verificationBadge(p.verificationStatus)}
-                  {(p.hasProof || p.proofImageUrl) && (
-                    <a
-                      href={paymentProofUrl(p.id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 block text-xs text-blue-600"
+          <CardContent className="space-y-4">
+            {booking.payments.map((p) => (
+              <div key={p.id} className="space-y-2">
+                <PaymentHistoryItem
+                  payment={p}
+                  canEdit
+                  onUpdated={refreshBooking}
+                />
+                {p.verificationStatus === "PENDING" && (
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      size="sm"
+                      disabled={verifyingPaymentId === p.id}
+                      onClick={() => verifyPayment(p.id, "VERIFIED")}
                     >
-                      View proof
-                    </a>
-                  )}
-                </div>
+                      <Check className="h-4 w-4" />
+                      Verify
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={verifyingPaymentId === p.id}
+                      onClick={() => verifyPayment(p.id, "REJECTED")}
+                    >
+                      <X className="h-4 w-4" />
+                      Reject
+                    </Button>
+                  </div>
+                )}
               </div>
             ))}
           </CardContent>

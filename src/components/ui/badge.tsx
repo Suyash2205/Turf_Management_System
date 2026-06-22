@@ -36,6 +36,8 @@ export function paymentStatusBadge(status: string) {
       return <Badge variant="success">Paid</Badge>;
     case "PARTIAL":
       return <Badge variant="warning">Partial</Badge>;
+    case "REJECTED":
+      return <Badge variant="danger">Payment Rejected</Badge>;
     default:
       return <Badge variant="danger">Pending</Badge>;
   }
