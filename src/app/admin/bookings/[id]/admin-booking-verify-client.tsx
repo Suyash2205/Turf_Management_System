@@ -44,7 +44,9 @@ export function AdminBookingVerifyClient({
   booking: Booking;
 }) {
   const [booking, setBooking] = useState(initialBooking);
-  const [verifying, setVerifying] = useState(false);
+  const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(
+    null
+  );
 
   const pendingPayments = booking.payments.filter(
     (p) => p.verificationStatus === "PENDING"
@@ -62,7 +64,7 @@ export function AdminBookingVerifyClient({
     paymentId: string,
     status: "VERIFIED" | "REJECTED"
   ) {
-    setVerifying(true);
+    setVerifyingPaymentId(paymentId);
     try {
       await fetch("/api/payments/verify", {
         method: "PATCH",
@@ -71,7 +73,7 @@ export function AdminBookingVerifyClient({
       });
       await refreshBooking();
     } finally {
-      setVerifying(false);
+      setVerifyingPaymentId(null);
     }
   }
 
@@ -134,7 +136,7 @@ export function AdminBookingVerifyClient({
                 key={payment.id}
                 payment={payment}
                 onVerify={verifyPayment}
-                verifying={verifying}
+                verifying={verifyingPaymentId === payment.id}
               />
             ))}
           </CardContent>

@@ -28,6 +28,9 @@ interface PendingPayment {
 export function VerificationClient() {
   const [payments, setPayments] = useState<PendingPayment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(
+    null
+  );
 
   async function loadPayments() {
     setLoading(true);
@@ -38,12 +41,17 @@ export function VerificationClient() {
   }
 
   async function verifyPayment(paymentId: string, status: "VERIFIED" | "REJECTED") {
-    await fetch("/api/payments/verify", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentId, status }),
-    });
-    loadPayments();
+    setVerifyingPaymentId(paymentId);
+    try {
+      await fetch("/api/payments/verify", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId, status }),
+      });
+      setPayments((prev) => prev.filter((p) => p.id !== paymentId));
+    } finally {
+      setVerifyingPaymentId(null);
+    }
   }
 
   useEffect(() => {
@@ -107,6 +115,7 @@ export function VerificationClient() {
                   <div className="flex gap-2">
                     <Button
                       size="sm"
+                      disabled={verifyingPaymentId === p.id}
                       onClick={() => verifyPayment(p.id, "VERIFIED")}
                     >
                       <Check className="h-4 w-4" />
@@ -115,6 +124,7 @@ export function VerificationClient() {
                     <Button
                       size="sm"
                       variant="outline"
+                      disabled={verifyingPaymentId === p.id}
                       onClick={() => verifyPayment(p.id, "REJECTED")}
                     >
                       <X className="h-4 w-4" />
