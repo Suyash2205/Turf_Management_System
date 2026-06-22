@@ -61,8 +61,12 @@ export async function PATCH(
       proofImageUrl?: string;
       extractedSenderName?: string | null;
       extractedAmount?: number | null;
-      verificationStatus?: VerificationStatus;
-    } = {};
+      verificationStatus: VerificationStatus;
+      verifiedAt: null;
+    } = {
+      verificationStatus: VerificationStatus.PENDING,
+      verifiedAt: null,
+    };
 
     if (amountRaw != null && amountRaw !== "") {
       const amount = parseFloat(amountRaw as string);
@@ -130,13 +134,6 @@ export async function PATCH(
         { error: "Payment screenshot is required for online payments" },
         { status: 400 }
       );
-    }
-
-    if (
-      existing.verificationStatus === VerificationStatus.REJECTED ||
-      existing.verificationStatus === VerificationStatus.PENDING
-    ) {
-      data.verificationStatus = VerificationStatus.PENDING;
     }
 
     const payment = await prisma.payment.update({
