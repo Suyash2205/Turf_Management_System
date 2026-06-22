@@ -27,11 +27,13 @@ export function BookingExtrasForm({
   const [extraAmount, setExtraAmount] = useState("");
   const [extraLoading, setExtraLoading] = useState(false);
   const [extraError, setExtraError] = useState("");
+  const [extraSuccess, setExtraSuccess] = useState("");
 
   const [extraHours, setExtraHours] = useState("1");
   const [hoursAmount, setHoursAmount] = useState("");
   const [hoursLoading, setHoursLoading] = useState(false);
   const [hoursError, setHoursError] = useState("");
+  const [hoursSuccess, setHoursSuccess] = useState("");
 
   const previewEndTime = useMemo(() => {
     const base = endTime || startTime;
@@ -71,12 +73,15 @@ export function BookingExtrasForm({
     if (data.booking) {
       await onSuccess(data.booking);
     }
+
+    return data.booking as { totalAmount: number; endTime?: string | null } | undefined;
   }
 
   async function handleAddExtra(e: React.FormEvent) {
     e.preventDefault();
     setExtraLoading(true);
     setExtraError("");
+    setExtraSuccess("");
 
     try {
       const description = extraDescription.trim();
@@ -85,12 +90,18 @@ export function BookingExtrasForm({
         return;
       }
 
-      await submitAdjustment({
+      const amount = parseFloat(extraAmount);
+      const booking = await submitAdjustment({
         type: "EXTRA_CHARGE",
         description,
         amount: extraAmount,
       });
 
+      setExtraSuccess(
+        booking
+          ? `${description} — ${formatCurrency(amount)} added. New total: ${formatCurrency(booking.totalAmount)}`
+          : `${description} added successfully.`
+      );
       setExtraDescription("");
       setExtraAmount("");
     } catch (err) {
@@ -104,6 +115,7 @@ export function BookingExtrasForm({
     e.preventDefault();
     setHoursLoading(true);
     setHoursError("");
+    setHoursSuccess("");
 
     try {
       const hours = parseFloat(extraHours);
@@ -112,13 +124,21 @@ export function BookingExtrasForm({
         return;
       }
 
-      await submitAdjustment({
+      const amount = parseFloat(hoursAmount);
+      const booking = await submitAdjustment({
         type: "EXTRA_HOURS",
         description: `Extra ${hours} hr${hours === 1 ? "" : "s"}`,
         amount: hoursAmount,
         hours: extraHours,
       });
 
+      const endNote =
+        booking?.endTime ? ` End time: ${booking.endTime}.` : "";
+      setHoursSuccess(
+        booking
+          ? `Extra ${hours} hr${hours === 1 ? "" : "s"} — ${formatCurrency(amount)} added.${endNote} New total: ${formatCurrency(booking.totalAmount)}`
+          : "Extra hours added successfully."
+      );
       setHoursAmount("");
     } catch (err) {
       setHoursError(
@@ -149,7 +169,11 @@ export function BookingExtrasForm({
               <button
                 key={preset}
                 type="button"
-                onClick={() => setExtraDescription(preset)}
+                onClick={() => {
+                  setExtraDescription(preset);
+                  setExtraSuccess("");
+                  setExtraError("");
+                }}
                 className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                   extraDescription === preset
                     ? "border-emerald-500 bg-emerald-50 text-emerald-700"
@@ -161,7 +185,11 @@ export function BookingExtrasForm({
             ))}
             <button
               type="button"
-              onClick={() => setExtraDescription("")}
+              onClick={() => {
+                setExtraDescription("");
+                setExtraSuccess("");
+                setExtraError("");
+              }}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:border-emerald-300"
             >
               Other
@@ -173,7 +201,10 @@ export function BookingExtrasForm({
               <label className="mb-1 block text-sm font-medium">Item</label>
               <Input
                 value={extraDescription}
-                onChange={(e) => setExtraDescription(e.target.value)}
+                onChange={(e) => {
+                  setExtraDescription(e.target.value);
+                  setExtraSuccess("");
+                }}
                 placeholder="e.g. Ball, Water, Bibs"
                 required
               />
@@ -185,12 +216,20 @@ export function BookingExtrasForm({
                 min="1"
                 step="1"
                 value={extraAmount}
-                onChange={(e) => setExtraAmount(e.target.value)}
+                onChange={(e) => {
+                  setExtraAmount(e.target.value);
+                  setExtraSuccess("");
+                }}
                 placeholder="Enter amount"
                 required
               />
             </div>
             {extraError && <p className="text-sm text-red-600">{extraError}</p>}
+            {extraSuccess && (
+              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                {extraSuccess}
+              </p>
+            )}
             <Button type="submit" className="w-full" disabled={extraLoading}>
               <Plus className="h-4 w-4" />
               {extraLoading ? "Adding…" : "Add to booking"}
@@ -248,6 +287,11 @@ export function BookingExtrasForm({
               </p>
             )}
             {hoursError && <p className="text-sm text-red-600">{hoursError}</p>}
+            {hoursSuccess && (
+              <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                {hoursSuccess}
+              </p>
+            )}
             <Button type="submit" className="w-full" disabled={hoursLoading}>
               <Plus className="h-4 w-4" />
               {hoursLoading ? "Adding…" : "Add extra hours"}
