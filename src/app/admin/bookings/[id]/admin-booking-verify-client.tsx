@@ -4,13 +4,17 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { paymentStatusBadge } from "@/components/ui/badge";
 import { PaymentRecordForm } from "@/components/payment-record-form";
 import { PaymentHistoryItem } from "@/components/payment-history-item";
 import { canRecordPayment } from "@/lib/payment-access";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Check, X } from "lucide-react";
+import {
+  VerifyPaymentButtons,
+  type VerifyAction,
+  type VerifyState,
+} from "@/components/verify-payment-buttons";
+import { useLoading } from "@/components/loading-provider";
 
 interface Payment {
   id: string;
@@ -47,31 +51,29 @@ export function AdminBookingVerifyClient({
   booking: Booking;
 }) {
   const [booking, setBooking] = useState(initialBooking);
-  const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(
-    null
-  );
+  const [verifyState, setVerifyState] = useState<VerifyState>(null);
+  const { run } = useLoading();
 
   function applyBooking(updated: Record<string, unknown>) {
     setBooking(updated as unknown as Booking);
   }
 
-  async function verifyPayment(
-    paymentId: string,
-    status: "VERIFIED" | "REJECTED"
-  ) {
-    setVerifyingPaymentId(paymentId);
+  async function verifyPayment(paymentId: string, status: VerifyAction) {
+    setVerifyState({ paymentId, action: status });
     try {
-      const res = await fetch("/api/payments/verify", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId, status }),
+      await run(async () => {
+        const res = await fetch("/api/payments/verify", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId, status }),
+        });
+        const data = await res.json();
+        if (res.ok && data.booking) {
+          setBooking(data.booking);
+        }
       });
-      const data = await res.json();
-      if (res.ok && data.booking) {
-        setBooking(data.booking);
-      }
     } finally {
-      setVerifyingPaymentId(null);
+      setVerifyState(null);
     }
   }
 
@@ -163,25 +165,11 @@ export function AdminBookingVerifyClient({
                   onUpdated={applyBooking}
                 />
                 {p.verificationStatus === "PENDING" && (
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      size="sm"
-                      disabled={verifyingPaymentId === p.id}
-                      onClick={() => verifyPayment(p.id, "VERIFIED")}
-                    >
-                      <Check className="h-4 w-4" />
-                      Verify
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={verifyingPaymentId === p.id}
-                      onClick={() => verifyPayment(p.id, "REJECTED")}
-                    >
-                      <X className="h-4 w-4" />
-                      Reject
-                    </Button>
-                  </div>
+                  <VerifyPaymentButtons
+                    paymentId={p.id}
+                    verifyState={verifyState}
+                    onVerify={verifyPayment}
+                  />
                 )}
               </div>
             ))}

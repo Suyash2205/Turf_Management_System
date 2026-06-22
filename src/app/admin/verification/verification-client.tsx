@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, X } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { verificationBadge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { paymentProofUrl } from "@/lib/payment-proof";
 import { useLoading } from "@/components/loading-provider";
+import {
+  VerifyPaymentButtons,
+  type VerifyAction,
+  type VerifyState,
+} from "@/components/verify-payment-buttons";
 
 interface PendingPayment {
   id: string;
@@ -29,9 +32,7 @@ interface PendingPayment {
 export function VerificationClient() {
   const [payments, setPayments] = useState<PendingPayment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [verifyingPaymentId, setVerifyingPaymentId] = useState<string | null>(
-    null
-  );
+  const [verifyState, setVerifyState] = useState<VerifyState>(null);
   const { run } = useLoading();
 
   async function loadPayments() {
@@ -47,17 +48,21 @@ export function VerificationClient() {
     }
   }
 
-  async function verifyPayment(paymentId: string, status: "VERIFIED" | "REJECTED") {
-    setVerifyingPaymentId(paymentId);
+  async function verifyPayment(paymentId: string, status: VerifyAction) {
+    setVerifyState({ paymentId, action: status });
     try {
-      await fetch("/api/payments/verify", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId, status }),
+      await run(async () => {
+        const res = await fetch("/api/payments/verify", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId, status }),
+        });
+        if (res.ok) {
+          setPayments((prev) => prev.filter((p) => p.id !== paymentId));
+        }
       });
-      setPayments((prev) => prev.filter((p) => p.id !== paymentId));
     } finally {
-      setVerifyingPaymentId(null);
+      setVerifyState(null);
     }
   }
 
@@ -119,25 +124,12 @@ export function VerificationClient() {
                       </a>
                     )}
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      disabled={verifyingPaymentId === p.id}
-                      onClick={() => verifyPayment(p.id, "VERIFIED")}
-                    >
-                      <Check className="h-4 w-4" />
-                      Verify
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={verifyingPaymentId === p.id}
-                      onClick={() => verifyPayment(p.id, "REJECTED")}
-                    >
-                      <X className="h-4 w-4" />
-                      Reject
-                    </Button>
-                  </div>
+                  <VerifyPaymentButtons
+                    paymentId={p.id}
+                    verifyState={verifyState}
+                    onVerify={verifyPayment}
+                    className="flex gap-2"
+                  />
                 </div>
               </CardContent>
             </Card>

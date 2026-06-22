@@ -127,8 +127,39 @@ export async function recalculateAndSerializeBooking(
   bookingId: string,
   options?: SerializeOptions
 ) {
-  await recalculateBookingStatus(bookingId);
-  return fetchSerializedBooking(bookingId, options);
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: bookingWithPaymentsInclude,
+  });
+  if (!booking) return null;
+
+  const total = toNumber(booking.totalAmount);
+  const verifiedPaid = getVerifiedPaidAmount(booking.payments);
+  const rejected = hasRejectedPayments(booking.payments);
+  const awaitingVerification = booking.payments.some(
+    (p) => p.verificationStatus === VerificationStatus.PENDING
+  );
+
+  let paymentStatus: BookingPaymentStatus;
+  if (booking.paidOnKhelomore || verifiedPaid >= total) {
+    paymentStatus = BookingPaymentStatus.COMPLETED;
+  } else if (rejected && verifiedPaid < total) {
+    paymentStatus = BookingPaymentStatus.REJECTED;
+  } else if (verifiedPaid > 0 || awaitingVerification) {
+    paymentStatus = BookingPaymentStatus.PARTIAL;
+  } else {
+    paymentStatus = BookingPaymentStatus.PENDING;
+  }
+
+  if (booking.paymentStatus !== paymentStatus) {
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { paymentStatus },
+    });
+    booking.paymentStatus = paymentStatus;
+  }
+
+  return serializeBooking(booking, { pendingProofOnly: true, ...options });
 }
 
 export function getDefaultVerificationStatus(method: PaymentMethod) {

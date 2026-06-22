@@ -17,7 +17,7 @@ type LoadingContextValue = {
 const LoadingContext = createContext<LoadingContextValue | null>(null);
 
 /** Only show the full-screen overlay if work takes longer than this. */
-const OVERLAY_DELAY_MS = 400;
+const OVERLAY_DELAY_MS = 250;
 
 export function LoadingProvider({ children }: { children: React.ReactNode }) {
   const [activeCount, setActiveCount] = useState(0);

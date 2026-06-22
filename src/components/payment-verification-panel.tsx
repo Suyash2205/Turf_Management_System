@@ -1,10 +1,13 @@
 "use client";
 
-import { Check, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { verificationBadge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { paymentProofUrl } from "@/lib/payment-proof";
+import {
+  VerifyPaymentButtons,
+  type VerifyAction,
+  type VerifyState,
+} from "@/components/verify-payment-buttons";
 
 export interface VerifiablePayment {
   id: string;
@@ -20,14 +23,14 @@ export interface VerifiablePayment {
 
 interface PaymentVerificationPanelProps {
   payment: VerifiablePayment;
-  onVerify: (paymentId: string, status: "VERIFIED" | "REJECTED") => void | Promise<void>;
-  verifying?: boolean;
+  verifyState: VerifyState;
+  onVerify: (paymentId: string, status: VerifyAction) => void | Promise<void>;
 }
 
 export function PaymentVerificationPanel({
   payment,
+  verifyState,
   onVerify,
-  verifying = false,
 }: PaymentVerificationPanelProps) {
   const proofUrl = paymentProofUrl(payment.id);
   const hasProof = payment.hasProof || !!payment.proofImageUrl;
@@ -65,25 +68,12 @@ export function PaymentVerificationPanel({
         )}
       </div>
       {payment.verificationStatus === "PENDING" && (
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            disabled={verifying}
-            onClick={() => onVerify(payment.id, "VERIFIED")}
-          >
-            <Check className="h-4 w-4" />
-            Verify
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={verifying}
-            onClick={() => onVerify(payment.id, "REJECTED")}
-          >
-            <X className="h-4 w-4" />
-            Reject
-          </Button>
-        </div>
+        <VerifyPaymentButtons
+          paymentId={payment.id}
+          verifyState={verifyState}
+          onVerify={onVerify}
+          className="flex gap-2"
+        />
       )}
     </div>
   );
