@@ -8,63 +8,66 @@ export type DefaultUser = {
   role: UserRole;
 };
 
-export const DEFAULT_USERS: DefaultUser[] = [
-  {
-    email: "admin@turfpay.com",
-    password: "admin123",
-    name: "Admin",
-    role: "ADMIN",
-  },
-  {
-    email: "staff@turfpay.com",
-    password: "staff123",
-    name: "Ground Staff",
-    role: "STAFF",
-  },
-  {
-    email: "hitesh@turfpay.com",
-    password: "Hitesh@123",
-    name: "Hitesh",
-    role: "STAFF",
-  },
-  {
-    email: "yogita@turfpay.com",
-    password: "Yogita@123",
-    name: "Yogita",
-    role: "ADMIN",
-  },
-  {
-    email: "sunil@turfpay.com",
-    password: "Sunil@123",
-    name: "Sunil",
-    role: "ADMIN",
-  },
-  {
-    email: "suyash@turfpay.com",
-    password: "Suyash@123",
-    name: "Suyash",
-    role: "ADMIN",
-  },
+const USER_DEFINITIONS: Omit<DefaultUser, "password">[] = [
+  { email: "admin@turfpay.com", name: "Admin", role: "ADMIN" },
+  { email: "staff@turfpay.com", name: "Ground Staff", role: "STAFF" },
+  { email: "hitesh@turfpay.com", name: "Hitesh", role: "STAFF" },
+  { email: "yogita@turfpay.com", name: "Yogita", role: "ADMIN" },
+  { email: "sunil@turfpay.com", name: "Sunil", role: "ADMIN" },
+  { email: "suyash@turfpay.com", name: "Suyash", role: "ADMIN" },
 ];
 
+const PASSWORD_ENV_KEYS: Record<string, string> = {
+  "admin@turfpay.com": "SEED_PASSWORD_ADMIN",
+  "staff@turfpay.com": "SEED_PASSWORD_STAFF",
+  "hitesh@turfpay.com": "SEED_PASSWORD_HITESH",
+  "yogita@turfpay.com": "SEED_PASSWORD_YOGITA",
+  "sunil@turfpay.com": "SEED_PASSWORD_SUNIL",
+  "suyash@turfpay.com": "SEED_PASSWORD_SUYASH",
+};
+
+function getSeedPassword(email: string): string {
+  const envKey = PASSWORD_ENV_KEYS[email.toLowerCase()];
+  const password = envKey ? process.env[envKey] : undefined;
+
+  if (!password) {
+    throw new Error(
+      `Missing ${envKey} for ${email}. Set seed passwords in environment variables only — never commit them to git.`
+    );
+  }
+
+  return password;
+}
+
+export function getDefaultUsers(): DefaultUser[] {
+  return USER_DEFINITIONS.map((user) => ({
+    ...user,
+    email: user.email.toLowerCase(),
+    password: getSeedPassword(user.email),
+  }));
+}
+
 export async function upsertDefaultUsers(prisma: PrismaClient) {
-  for (const user of DEFAULT_USERS) {
-    const email = user.email.toLowerCase();
+  const users = getDefaultUsers();
+
+  for (const user of users) {
     const password = await bcrypt.hash(user.password, 12);
 
     await prisma.user.upsert({
-      where: { email },
+      where: { email: user.email },
       update: {
         password,
         name: user.name,
         role: user.role,
       },
       create: {
-        email,
+        email: user.email,
         password,
         name: user.name,
         role: user.role,
       },
     });
   }
+
+  return users;
 }

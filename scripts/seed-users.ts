@@ -1,14 +1,14 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
-import { DEFAULT_USERS, upsertDefaultUsers } from "../src/lib/default-users";
+import { upsertDefaultUsers } from "../src/lib/default-users";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  await upsertDefaultUsers(prisma);
+  const users = await upsertDefaultUsers(prisma);
 
   console.log("Users seeded:");
-  for (const user of DEFAULT_USERS) {
+  for (const user of users) {
     console.log(`  ${user.role.padEnd(5)} ${user.email.toLowerCase()}`);
   }
 }

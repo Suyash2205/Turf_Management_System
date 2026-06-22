@@ -65,12 +65,9 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ### Demo logins (after seed)
 
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@turfpay.com | admin123 |
-| Staff | staff@turfpay.com | staff123 |
+Set passwords in `.env` using `SEED_PASSWORD_*` variables (see `.env.example`), then run `npm run seed:users`.
 
-**Change these passwords immediately in production.**
+**Never commit real passwords to git. Rotate any password that was ever pushed to GitHub.**
 
 ## User Roles
 
