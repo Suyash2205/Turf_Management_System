@@ -14,6 +14,7 @@
     "migrate:proofs": "npx tsx scripts/migrate-proofs-to-blob.ts",
     "recalculate:statuses": "npx tsx scripts/recalculate-booking-statuses.ts",
     "seed:users": "npx tsx scripts/seed-users.ts",
+    "seed:team-users": "npx tsx scripts/add-team-users.ts",
     "sync:email-history": "npx tsx scripts/sync-email-history.ts",
     "reimport:bulk-bookings": "npx tsx scripts/reimport-bulk-bookings.ts",
     "postinstall": "prisma generate"
