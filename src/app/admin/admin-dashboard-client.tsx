@@ -8,6 +8,7 @@ import {
   TrendingUp,
   RefreshCw,
   Mail,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -62,7 +63,9 @@ export function AdminDashboardClient() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [sheetsSyncing, setSheetsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState("");
+  const busy = syncing || sheetsSyncing;
   const { run } = useLoading();
 
   async function loadDashboard() {
@@ -199,6 +202,28 @@ export function AdminDashboardClient() {
     }
   }
 
+  async function syncSheets() {
+    setSheetsSyncing(true);
+    setSyncResult("");
+
+    try {
+      await run(async () => {
+        const res = await fetch("/api/google-sheets/sync", { method: "POST" });
+        const json = await parseSyncResponse(res);
+        const counts = json.counts as Record<string, number> | undefined;
+        setSyncResult(
+          counts
+            ? `Sheets sync done: ${counts.mainSheet} main rows, ${counts.bookings} bookings, ${counts.payments} payments exported.`
+            : "Sheets sync completed."
+        );
+      });
+    } catch (err) {
+      setSyncResult(err instanceof Error ? err.message : "Sheets sync failed");
+    } finally {
+      setSheetsSyncing(false);
+    }
+  }
+
   useEffect(() => {
     loadDashboard();
   }, []);
@@ -219,13 +244,18 @@ export function AdminDashboardClient() {
           <EmailSyncStatus className="mt-1" />
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <Button variant="outline" onClick={loadDashboard} className="w-full sm:w-auto">
+          <Button
+            variant="outline"
+            onClick={loadDashboard}
+            disabled={busy}
+            className="w-full sm:w-auto"
+          >
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
           <Button
             onClick={() => syncEmails(false)}
-            disabled={syncing}
+            disabled={busy}
             className="w-full sm:w-auto"
           >
             <Mail className="h-4 w-4" />
@@ -234,11 +264,20 @@ export function AdminDashboardClient() {
           <Button
             variant="secondary"
             onClick={() => syncEmails(true)}
-            disabled={syncing}
-            className="col-span-2 w-full sm:col-auto sm:w-auto"
+            disabled={busy}
+            className="w-full sm:w-auto"
           >
             <Mail className="h-4 w-4" />
             {syncing ? "Syncing..." : "Full Sync (30 days)"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={syncSheets}
+            disabled={busy}
+            className="col-span-2 w-full sm:col-auto sm:w-auto"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            {sheetsSyncing ? "Exporting..." : "Sync to Sheets"}
           </Button>
         </div>
       </div>
