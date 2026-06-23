@@ -4,8 +4,11 @@ import { prisma } from "@/lib/db";
 import {
   isKhelomoreBookingEmail,
   matchesVenueFilter,
+  parseKhelomoreCancelledBookings,
   parseKhelomoreEmails,
+  parseBookingId,
 } from "@/lib/email-parser";
+import { removeCancelledBookings } from "@/lib/cancelled-bookings";
 import { BookingPaymentStatus } from "@prisma/client";
 
 export interface SyncOptions {
@@ -56,9 +59,8 @@ function getSyncWindow(fullSync: boolean, options?: SyncOptions) {
   return { since, before: undefined };
 }
 
-function extractExternalId(subject: string): string | null {
-  const match = subject.match(/KheloMore:\s*([A-Z0-9-]+)/i);
-  return match ? match[1] : null;
+function extractExternalId(subject: string, body: string): string | null {
+  return parseBookingId(subject, body);
 }
 
 async function searchKhelomoreUids(
@@ -70,7 +72,8 @@ async function searchKhelomoreUids(
   const venue = process.env.KHELOMORE_VENUE_NAME?.trim();
 
   if (imapHost.includes("gmail")) {
-    let query = `from:info@khelomore.com subject:"You have a new booking from KheloMore"`;
+    let query =
+      'from:info@khelomore.com (subject:"You have a new booking from KheloMore" OR subject:"has been modified")';
     if (venue) query += ` "${venue}"`;
     query += ` after:${formatGmailDate(since)}`;
     if (before) query += ` before:${formatGmailDate(before)}`;
@@ -124,6 +127,7 @@ export async function syncBookingsFromEmail(
 
   let emailsFound = 0;
   let bookingsCreated = 0;
+  let bookingsCancelled = 0;
   let emailsSkipped = 0;
   const errors: string[] = [];
   const { since, before } = getSyncWindow(fullSync, options);
@@ -139,6 +143,7 @@ export async function syncBookingsFromEmail(
         return {
           emailsFound: 0,
           bookingsCreated: 0,
+          bookingsCancelled: 0,
           emailsSkipped: 0,
           errors: [],
           fullSync,
@@ -160,7 +165,7 @@ export async function syncBookingsFromEmail(
           uid: message.uid!,
           from,
           subject,
-          externalId: extractExternalId(subject),
+          externalId: parseBookingId(subject, ""),
         });
       }
 
@@ -169,6 +174,7 @@ export async function syncBookingsFromEmail(
         return {
           emailsFound: 0,
           bookingsCreated: 0,
+          bookingsCancelled: 0,
           emailsSkipped: 0,
           errors: [],
           fullSync,
@@ -213,6 +219,20 @@ export async function syncBookingsFromEmail(
         const parsedEmail = await simpleParser(message.source!);
         const body = parsedEmail.html || parsedEmail.text || "";
         const baseMessageId = parsedEmail.messageId || String(message.uid);
+        const externalId =
+          candidate.externalId || extractExternalId(candidate.subject, body);
+
+        const cancelledBookings = parseKhelomoreCancelledBookings(
+          candidate.subject,
+          body
+        );
+        if (cancelledBookings !== null) {
+          bookingsCancelled += await removeCancelledBookings(
+            externalId,
+            cancelledBookings
+          );
+          continue;
+        }
 
         const bookingEntries = parseKhelomoreEmails(candidate.subject, body);
         if (bookingEntries.length === 0) {
@@ -286,9 +306,13 @@ export async function syncBookingsFromEmail(
         emailsFound,
         bookingsCreated,
         errors: errors.length
-          ? [...errors, `Skipped ${emailsSkipped} other venues`].join("; ")
-          : emailsSkipped > 0
-            ? `Skipped ${emailsSkipped} other venues`
+          ? [
+              ...errors,
+              `Skipped ${emailsSkipped} other venues`,
+              `Removed ${bookingsCancelled} cancelled bookings`,
+            ].join("; ")
+          : emailsSkipped > 0 || bookingsCancelled > 0
+            ? `Skipped ${emailsSkipped} other venues; Removed ${bookingsCancelled} cancelled bookings`
             : null,
       },
     });
@@ -297,6 +321,7 @@ export async function syncBookingsFromEmail(
   return {
     emailsFound,
     bookingsCreated,
+    bookingsCancelled,
     emailsSkipped,
     errors,
     fullSync,

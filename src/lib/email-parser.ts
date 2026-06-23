@@ -214,11 +214,15 @@ function parseAmount(value: string): number | null {
   return parseFloat(match[1].replace(/,/g, ""));
 }
 
-function parseBookingId(subject: string, text: string): string | null {
+export function parseBookingId(subject: string, text: string): string | null {
   const subjectMatch = subject.match(
     /KheloMore:\s*([A-Z0-9-]+)/i
   );
   if (subjectMatch) return subjectMatch[1];
+  const modifiedSubjectMatch = subject.match(
+    /Booking\s+id\s+([A-Z0-9-]+)\s+has\s+been\s+modified/i
+  );
+  if (modifiedSubjectMatch) return modifiedSubjectMatch[1];
 
   const bodyMatch = text.match(
     /Booking Details[\s\S]*?\b(\d{4}-\d+-[A-Z0-9]+)\b/i
@@ -299,7 +303,12 @@ function parseVenueDetails(text: string) {
   };
 }
 
-function parseSlots(text: string) {
+function parseSlots(
+  text: string,
+  options?: {
+    cancelledOnly?: boolean;
+  }
+) {
   const section = text.match(
     /Slot Details([\s\S]*?)(?:Bill Details|Important Instructions|$)/i
   )?.[1];
@@ -376,14 +385,18 @@ function parseSlots(text: string) {
 
     let turfName: string | undefined;
     let price: number | undefined;
+    let cancelled = false;
 
     for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
       if (dateLinePattern.test(lines[j])) break;
       if (parseTimeRangeLine(lines[j])) break;
+      if (/^cancelled$/i.test(lines[j])) {
+        cancelled = true;
+      }
       if (
         !turfName &&
         /^[A-Za-z]/.test(lines[j]) &&
-        !/^(Slot|Bill|Important|Pay balance|Share|Check|Any changes)/i.test(
+        !/^(Slot|Bill|Important|Pay balance|Share|Check|Any changes|Cancelled)/i.test(
           lines[j]
         )
       ) {
@@ -395,6 +408,8 @@ function parseSlots(text: string) {
       }
     }
 
+    if (options?.cancelledOnly && !cancelled) continue;
+
     day.slots.push({
       start: timeRange.start,
       end: timeRange.end,
@@ -403,7 +418,7 @@ function parseSlots(text: string) {
     });
   }
 
-  return { dayGroups };
+  return { dayGroups: dayGroups.filter((group) => group.slots.length > 0) };
 }
 
 function extractLabeledAmount(section: string, label: string): number | undefined {
@@ -623,6 +638,57 @@ export function parseKhelomoreEmail(
   return parseKhelomoreEmails(subject, body)[0] ?? null;
 }
 
+export function isKhelomoreCancelledEmail(body: string): boolean {
+  const text = normalizeEmailBody(body);
+  const normalized = text.toLowerCase();
+  return (
+    /status:\s*cancelled/i.test(text) ||
+    /status[\s\S]{0,160}cancelled/i.test(text) ||
+    normalized.includes("venue booking is cancelled")
+  );
+}
+
+/** Returns cancelled day-wise bookings to remove. `[]` means remove all under booking id. */
+export function parseKhelomoreCancelledBookings(
+  subject: string,
+  body: string
+): ParsedBookingEmail[] | null {
+  if (!isKhelomoreCancelledEmail(body)) return null;
+
+  const text = normalizeEmailBody(body);
+  const venue = parseVenueDetails(text);
+  const user = parseUserDetails(text);
+  const baseExternalId = parseBookingId(subject, text);
+  const { dayGroups } = parseSlots(text, { cancelledOnly: true });
+
+  if (dayGroups.length === 0) return [];
+
+  const customerName =
+    user.customerName ||
+    (baseExternalId ? `Guest (${baseExternalId.split("-").pop()})` : "Guest booking");
+
+  return dayGroups.map((group) => {
+    const dateKey = formatDateKey(group.bookingDate);
+    const turfNames = [
+      ...new Set(group.slots.map((slot) => slot.turfName).filter(Boolean)),
+    ];
+
+    return {
+      customerName,
+      customerPhone: user.customerPhone,
+      customerEmail: user.customerEmail,
+      bookingDate: group.bookingDate,
+      startTime: group.slots[0]?.start,
+      endTime: group.slots.at(-1)?.end,
+      totalAmount: 0,
+      paidOnKhelomore: false,
+      externalId: baseExternalId ? `${baseExternalId}#${dateKey}` : undefined,
+      venueName: venue.venueName,
+      turfName: turfNames.length === 1 ? turfNames[0] : turfNames.join(", "),
+    };
+  });
+}
+
 export function isKhelomoreBookingEmail(from: string, subject: string): boolean {
   const fromLower = from.toLowerCase();
   const subjectLower = subject.toLowerCase();
@@ -631,9 +697,10 @@ export function isKhelomoreBookingEmail(from: string, subject: string): boolean 
     fromLower.includes("info@khelomore.com") ||
     fromLower.includes("khelomore.com");
 
-  const subjectMatches = subjectLower.includes(
-    "you have a new booking from khelomore"
-  );
+  const subjectMatches =
+    subjectLower.includes("you have a new booking from khelomore") ||
+    (subjectLower.includes("booking id") &&
+      subjectLower.includes("has been modified"));
 
   return fromMatches && subjectMatches;
 }
