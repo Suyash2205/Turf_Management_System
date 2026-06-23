@@ -15,6 +15,7 @@
     "recalculate:statuses": "npx tsx scripts/recalculate-booking-statuses.ts",
     "seed:users": "npx tsx scripts/seed-users.ts",
     "sync:email-history": "npx tsx scripts/sync-email-history.ts",
+    "reimport:bulk-bookings": "npx tsx scripts/reimport-bulk-bookings.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

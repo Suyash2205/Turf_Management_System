@@ -180,21 +180,26 @@ export async function syncBookingsFromEmail(
         .map((c) => c.externalId)
         .filter((id): id is string => !!id);
 
-      const existingByExternalId = externalIds.length
-        ? await prisma.booking.findMany({
-            where: { externalId: { in: externalIds } },
-            select: { externalId: true },
-          })
-        : [];
+      const candidateByUid = new Map(candidates.map((c) => [c.uid, c]));
+
+      const existingByExternalId =
+        externalIds.length > 0
+          ? await prisma.booking.findMany({
+              where: {
+                OR: externalIds.flatMap((id) => [
+                  { externalId: id },
+                  { externalId: { startsWith: `${id}#` } },
+                ]),
+              },
+              select: { externalId: true },
+            })
+          : [];
       const knownExternalIds = new Set(
         existingByExternalId.map((b) => b.externalId)
       );
 
-      const uidsToDownload = candidates
-        .filter((c) => !c.externalId || !knownExternalIds.has(c.externalId))
-        .map((c) => c.uid);
-
-      const candidateByUid = new Map(candidates.map((c) => [c.uid, c]));
+      // Always download bodies so multi-day / bulk emails can fill missing days.
+      const uidsToDownload = candidates.map((c) => c.uid);
 
       // Phase 2: download bodies only for new bookings
       for await (const message of client.fetch(
@@ -208,11 +213,6 @@ export async function syncBookingsFromEmail(
         const parsedEmail = await simpleParser(message.source!);
         const body = parsedEmail.html || parsedEmail.text || "";
         const baseMessageId = parsedEmail.messageId || String(message.uid);
-
-        const existingByMessage = await prisma.booking.findUnique({
-          where: { emailMessageId: baseMessageId },
-        });
-        if (existingByMessage) continue;
 
         const bookingEntries = parseKhelomoreEmails(candidate.subject, body);
         if (bookingEntries.length === 0) {

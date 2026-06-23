@@ -42,11 +42,156 @@ function normalizeEmailBody(body: string): string {
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
+    .replace(/&#8377;/gi, "₹")
     .replace(/&#?\w+;/g, " ")
     .replace(/[ \t]+/g, " ")
     .replace(/\n[ \t]+/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function parseTime12to24(hour: string, minute: string, ampm: string): string {
+  let h = parseInt(hour, 10);
+  const upper = ampm.toUpperCase();
+  if (upper === "PM" && h !== 12) h += 12;
+  if (upper === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${minute}`;
+}
+
+function parseTimeRangeLine(
+  line: string
+): { start: string; end: string } | null {
+  const match24 = line.match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+  if (match24) {
+    return { start: match24[1], end: match24[2] };
+  }
+
+  const match12 = line.match(
+    /^(\d{1,2}):(\d{2})\s*(AM|PM)\s*-\s*(\d{1,2}):(\d{2})\s*(AM|PM)$/i
+  );
+  if (match12) {
+    return {
+      start: parseTime12to24(match12[1], match12[2], match12[3]),
+      end: parseTime12to24(match12[4], match12[5], match12[6]),
+    };
+  }
+
+  return null;
+}
+
+function parsePriceFromLine(line: string): number | null {
+  const match = line.match(/^[₹]?\s*([\d,]+(?:\.\d{1,2})?)$/);
+  if (!match) return null;
+  return parseFloat(match[1].replace(/,/g, ""));
+}
+
+type SlotGroup = {
+  bookingDate: Date;
+  slots: Array<{
+    start: string;
+    end: string;
+    turfName?: string;
+    price?: number;
+  }>;
+};
+
+function sumSlotPrices(dayGroups: SlotGroup[]) {
+  return dayGroups.reduce(
+    (sum, group) =>
+      sum + group.slots.reduce((daySum, slot) => daySum + (slot.price || 0), 0),
+    0
+  );
+}
+
+function fillMissingSlotTemplates(dayGroups: SlotGroup[]): SlotGroup[] {
+  const template = dayGroups.find((group) => group.slots.length > 0)?.slots;
+  if (!template?.length) return dayGroups;
+
+  return dayGroups.map((group) => ({
+    ...group,
+    slots:
+      group.slots.length > 0
+        ? group.slots
+        : template.map((slot) => ({ ...slot })),
+  }));
+}
+
+function getRecurringIntervalDays(dates: Date[]): number | null {
+  if (dates.length < 2) return 7;
+
+  const intervals: number[] = [];
+  for (let i = 1; i < dates.length; i++) {
+    intervals.push(
+      Math.round(
+        (dates[i].getTime() - dates[i - 1].getTime()) / (24 * 60 * 60 * 1000)
+      )
+    );
+  }
+
+  const weekly = intervals.every((days) => days === 7);
+  if (weekly) return 7;
+
+  const monthly = intervals.every((days) => days >= 28 && days <= 31);
+  if (monthly) return 30;
+
+  const allSame = intervals.every((days) => days === intervals[0]);
+  return allSame ? intervals[0] : null;
+}
+
+function addDaysUtc(date: Date, days: number) {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function addMonthsUtc(date: Date, months: number) {
+  const next = new Date(date);
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return next;
+}
+
+/** Expand weekly/monthly bulk bookings when bill total exceeds visible sample slots. */
+function expandBulkRecurringDayGroups(
+  dayGroups: SlotGroup[],
+  bill: ReturnType<typeof parseBillDetails>
+): SlotGroup[] {
+  const billTotal = bill.slotPrice ?? bill.amountToCollect ?? 0;
+  if (!billTotal || dayGroups.length === 0) return dayGroups;
+
+  const filled = fillMissingSlotTemplates(dayGroups);
+  const visibleTotal = sumSlotPrices(filled);
+  if (visibleTotal <= 0) return filled;
+
+  const perDayAmount = visibleTotal / filled.length;
+  const impliedSessions = Math.round(billTotal / perDayAmount);
+  if (impliedSessions <= filled.length) return filled;
+
+  const sorted = [...filled].sort(
+    (a, b) => a.bookingDate.getTime() - b.bookingDate.getTime()
+  );
+  const intervalDays = getRecurringIntervalDays(
+    sorted.map((group) => group.bookingDate)
+  );
+  if (!intervalDays) return filled;
+
+  const template = sorted.find((group) => group.slots.length > 0)?.slots ?? [];
+  if (template.length === 0) return filled;
+
+  const expanded: SlotGroup[] = [];
+  let current = new Date(sorted[0].bookingDate);
+
+  for (let i = 0; i < impliedSessions; i++) {
+    expanded.push({
+      bookingDate: new Date(current),
+      slots: template.map((slot) => ({ ...slot })),
+    });
+    current =
+      intervalDays >= 28
+        ? addMonthsUtc(current, 1)
+        : addDaysUtc(current, intervalDays);
+  }
+
+  return expanded;
 }
 
 function parseKhelomoreDate(value: string): Date | null {
@@ -223,8 +368,8 @@ function parseSlots(text: string) {
       continue;
     }
 
-    const timeMatch = lines[i].match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/);
-    if (!timeMatch) continue;
+    const timeRange = parseTimeRangeLine(lines[i]);
+    if (!timeRange) continue;
 
     const day = ensureCurrentDay();
     if (!day) continue;
@@ -234,7 +379,7 @@ function parseSlots(text: string) {
 
     for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
       if (dateLinePattern.test(lines[j])) break;
-      if (/^\d{2}:\d{2}-\d{2}:\d{2}$/.test(lines[j])) break;
+      if (parseTimeRangeLine(lines[j])) break;
       if (
         !turfName &&
         /^[A-Za-z]/.test(lines[j]) &&
@@ -244,15 +389,15 @@ function parseSlots(text: string) {
       ) {
         turfName = lines[j];
       }
-      const priceMatch = lines[j].match(/^([\d,]+(?:\.\d{2})?)$/);
-      if (priceMatch && !price) {
-        price = parseFloat(priceMatch[1].replace(/,/g, ""));
+      const parsedPrice = parsePriceFromLine(lines[j]);
+      if (parsedPrice != null && price == null) {
+        price = parsedPrice;
       }
     }
 
     day.slots.push({
-      start: timeMatch[1],
-      end: timeMatch[2],
+      start: timeRange.start,
+      end: timeRange.end,
       turfName,
       price,
     });
@@ -355,6 +500,7 @@ function buildBookingFromDayGroup(
   bill: ReturnType<typeof parseBillDetails>,
   baseExternalId: string | null,
   allDaySlotTotal: number,
+  totalDayCount: number,
   isSingleDay: boolean
 ): ParsedBookingEmail | null {
   const daySlotTotal = group.slots.reduce(
@@ -369,15 +515,19 @@ function buildBookingFromDayGroup(
     totalAmount = amountReceived;
   } else if (paidOnKhelomore && daySlotTotal > 0) {
     totalAmount = daySlotTotal;
-  } else if (!totalAmount && allDaySlotTotal > 0 && bill.amountToCollect) {
+  } else if (daySlotTotal > 0) {
+    totalAmount = daySlotTotal;
+  } else if (allDaySlotTotal > 0 && bill.amountToCollect) {
     totalAmount = Math.round(
       (bill.amountToCollect * daySlotTotal) / allDaySlotTotal
     );
-  }
-  if (!totalAmount && allDaySlotTotal > 0 && bill.slotPrice) {
+  } else if (allDaySlotTotal > 0 && bill.slotPrice) {
     totalAmount = Math.round((bill.slotPrice * daySlotTotal) / allDaySlotTotal);
-  }
-  if (!totalAmount) {
+  } else if (totalDayCount > 1 && bill.amountToCollect) {
+    totalAmount = Math.round(bill.amountToCollect / totalDayCount);
+  } else if (totalDayCount > 1 && bill.slotPrice) {
+    totalAmount = Math.round(bill.slotPrice / totalDayCount);
+  } else {
     totalAmount = bill.amountToCollect ?? bill.slotPrice ?? 0;
   }
 
@@ -388,7 +538,7 @@ function buildBookingFromDayGroup(
   ];
   const dateKey = formatDateKey(group.bookingDate);
   const externalId =
-    baseExternalId && group.slots.length > 0
+    baseExternalId && totalDayCount > 1
       ? `${baseExternalId}#${dateKey}`
       : baseExternalId || undefined;
 
@@ -412,8 +562,9 @@ export function parseKhelomoreEmails(
   const text = normalizeEmailBody(body);
   const user = parseUserDetails(text);
   const venue = parseVenueDetails(text);
-  const { dayGroups } = parseSlots(text);
   const bill = parseBillDetails(text);
+  let { dayGroups } = parseSlots(text);
+  dayGroups = expandBulkRecurringDayGroups(dayGroups, bill);
   const baseExternalId = parseBookingId(subject, text);
 
   if (!user.customerName) {
@@ -452,6 +603,7 @@ export function parseKhelomoreEmails(
         bill,
         baseExternalId,
         allDaySlotTotal,
+        dayGroups.length,
         dayGroups.length === 1
       )
     )
