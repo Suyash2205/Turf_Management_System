@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { serializeBooking } from "@/lib/bookings";
+import { bookingHasDoubleBooking } from "@/lib/double-booking";
 import { AdminBookingVerifyClient } from "./admin-booking-verify-client";
 
 export default async function AdminBookingVerifyPage({
@@ -32,10 +33,13 @@ export default async function AdminBookingVerifyPage({
   if (!booking) notFound();
 
   const serialized = serializeBooking(booking, { pendingProofOnly: true });
+  const isDoubleBooking = await bookingHasDoubleBooking(id);
 
   return (
     <div className="mx-auto max-w-2xl">
-      <AdminBookingVerifyClient booking={serialized} />
+      <AdminBookingVerifyClient
+        booking={{ ...serialized, isDoubleBooking }}
+      />
     </div>
   );
 }

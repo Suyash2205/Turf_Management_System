@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { paymentStatusBadge } from "@/components/ui/badge";
 import { PaymentRecordForm } from "@/components/payment-record-form";
 import { PaymentHistoryItem } from "@/components/payment-history-item";
@@ -16,6 +18,10 @@ import {
 } from "@/components/verify-payment-buttons";
 import { useLoading } from "@/components/loading-provider";
 import { BookingAdjustmentsList } from "@/components/booking-extras-form";
+import {
+  DoubleBookingBadge,
+  doubleBookingCardClass,
+} from "@/components/double-booking-badge";
 
 interface Payment {
   id: string;
@@ -56,6 +62,7 @@ interface Booking {
   paidOnKhelomore: boolean;
   adjustments: BookingAdjustment[];
   payments: Payment[];
+  isDoubleBooking?: boolean;
 }
 
 export function AdminBookingVerifyClient({
@@ -65,6 +72,9 @@ export function AdminBookingVerifyClient({
 }) {
   const [booking, setBooking] = useState(initialBooking);
   const [verifyState, setVerifyState] = useState<VerifyState>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const router = useRouter();
   const { run } = useLoading();
 
   function applyBooking(updated: Record<string, unknown>) {
@@ -90,6 +100,32 @@ export function AdminBookingVerifyClient({
     }
   }
 
+  async function removeBooking() {
+    const confirmed = window.confirm(
+      `Remove this booking for ${booking.customerName}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/bookings/${booking.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to remove booking");
+      }
+      const date = booking.bookingDate.slice(0, 10);
+      router.push(`/admin/bookings?date=${date}`);
+      router.refresh();
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Failed to remove booking"
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const showRecordForm = canRecordPayment(booking);
 
   return (
@@ -102,11 +138,16 @@ export function AdminBookingVerifyClient({
         Back to bookings
       </Link>
 
-      <Card>
+      <Card className={booking.isDoubleBooking ? doubleBookingCardClass : ""}>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>{booking.customerName}</CardTitle>
-            {paymentStatusBadge(booking.paymentStatus)}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className={booking.isDoubleBooking ? "text-red-900" : ""}>
+              {booking.customerName}
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {booking.isDoubleBooking && <DoubleBookingBadge />}
+              {paymentStatusBadge(booking.paymentStatus)}
+            </div>
           </div>
           <p className="text-sm text-slate-500">
             {formatDate(booking.bookingDate)}
@@ -198,6 +239,30 @@ export function AdminBookingVerifyClient({
           </CardContent>
         </Card>
       )}
+
+      <Card className="border-red-200">
+        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-medium text-slate-900">Remove booking</p>
+            <p className="text-sm text-slate-500">
+              Delete a duplicate or incorrect entry. The other booking at the same
+              slot will return to normal.
+            </p>
+            {deleteError && (
+              <p className="mt-2 text-sm text-red-600">{deleteError}</p>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            onClick={removeBooking}
+            disabled={deleting}
+            className="border-red-300 text-red-700 hover:bg-red-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            {deleting ? "Removing..." : "Remove booking"}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

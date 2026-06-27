@@ -13,6 +13,10 @@ import {
 import { canRecordPayment } from "@/lib/payment-access";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useState } from "react";
+import {
+  DoubleBookingBadge,
+  doubleBookingCardClass,
+} from "@/components/double-booking-badge";
 
 interface Payment {
   id: string;
@@ -51,6 +55,7 @@ interface Booking {
   paidOnKhelomore: boolean;
   adjustments: BookingAdjustment[];
   payments: Payment[];
+  isDoubleBooking?: boolean;
 }
 
 export function PaymentEntryClient({ booking: initialBooking }: { booking: Booking }) {
@@ -73,11 +78,16 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
         Back to bookings
       </Link>
 
-      <Card>
+      <Card className={booking.isDoubleBooking ? doubleBookingCardClass : ""}>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>{booking.customerName}</CardTitle>
-            {paymentStatusBadge(booking.paymentStatus)}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className={booking.isDoubleBooking ? "text-red-900" : ""}>
+              {booking.customerName}
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {booking.isDoubleBooking && <DoubleBookingBadge />}
+              {paymentStatusBadge(booking.paymentStatus)}
+            </div>
           </div>
           <p className="text-sm text-slate-500">
             {formatDate(booking.bookingDate)}

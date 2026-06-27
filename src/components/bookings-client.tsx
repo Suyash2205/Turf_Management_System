@@ -12,6 +12,10 @@ import { Badge, paymentStatusBadge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useLoading } from "@/components/loading-provider";
 import { EmailSyncStatus } from "@/components/email-sync-status";
+import {
+  DoubleBookingBadge,
+  doubleBookingCardClass,
+} from "@/components/double-booking-badge";
 
 interface Booking {
   id: string;
@@ -21,12 +25,14 @@ interface Booking {
   startTime: string | null;
   endTime: string | null;
   turfName?: string | null;
+  venueName?: string | null;
   totalAmount: number;
   paidAmount: number;
   pendingAmount: number;
   paymentStatus: string;
   paidOnKhelomore: boolean;
   pendingVerificationCount?: number;
+  isDoubleBooking?: boolean;
 }
 
 export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" }) {
@@ -35,7 +41,9 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [date, setDate] = useState(
+    searchParams.get("date") || format(new Date(), "yyyy-MM-dd")
+  );
   const [statusFilter, setStatusFilter] = useState("");
   const [verifyFilter, setVerifyFilter] = useState(
     searchParams.get("verify") === "pending"
@@ -142,6 +150,7 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
         <div className="grid gap-3">
           {bookings.map((booking, index) => {
             const needsVerify = (booking.pendingVerificationCount ?? 0) > 0;
+            const isDouble = booking.isDoubleBooking ?? false;
             return (
               <Link
                 key={booking.id}
@@ -150,21 +159,36 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
               >
                 <Card
                   className={`transition-all duration-150 hover:shadow-md active:scale-[0.98] ${
+                    isDouble ? doubleBookingCardClass : ""
+                  } ${
                     activeId === booking.id
-                      ? "scale-[0.98] border-emerald-400 bg-emerald-50/40 shadow-md"
+                      ? isDouble
+                        ? "scale-[0.98] shadow-md"
+                        : "scale-[0.98] border-emerald-400 bg-emerald-50/40 shadow-md"
                       : ""
                   }`}
                 >
                   <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-start gap-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600">
+                      <span
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                          isDouble
+                            ? "bg-red-100 text-red-700"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
                         {index + 1}
                       </span>
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-slate-900">
+                          <h3
+                            className={`font-semibold ${
+                              isDouble ? "text-red-900" : "text-slate-900"
+                            }`}
+                          >
                             {booking.customerName}
                           </h3>
+                          {isDouble && <DoubleBookingBadge />}
                           {paymentStatusBadge(booking.paymentStatus)}
                           {booking.paidOnKhelomore && (
                             <span className="text-xs text-emerald-600">
@@ -184,6 +208,9 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
                         </p>
                         {booking.turfName && (
                           <p className="text-xs text-slate-400">{booking.turfName}</p>
+                        )}
+                        {booking.venueName && (
+                          <p className="text-xs text-slate-400">{booking.venueName}</p>
                         )}
                         {booking.customerPhone && (
                           <p className="text-sm text-slate-500">

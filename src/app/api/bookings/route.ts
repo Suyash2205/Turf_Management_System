@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { serializeBookingListItem } from "@/lib/bookings";
+import { markDoubleBookingFlags } from "@/lib/double-booking";
 import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET(request: Request) {
@@ -43,6 +44,7 @@ export async function GET(request: Request) {
       bookingDate: true,
       startTime: true,
       endTime: true,
+      venueName: true,
       turfName: true,
       totalAmount: true,
       paymentStatus: true,
@@ -53,7 +55,15 @@ export async function GET(request: Request) {
     },
   });
 
-  return NextResponse.json(bookings.map(serializeBookingListItem));
+  const doubleFlags = markDoubleBookingFlags(bookings);
+
+  return NextResponse.json(
+    bookings.map((booking) => ({
+      ...serializeBookingListItem(booking),
+      venueName: booking.venueName,
+      isDoubleBooking: doubleFlags.get(booking.id) ?? false,
+    }))
+  );
 }
 
 export async function POST(request: Request) {
