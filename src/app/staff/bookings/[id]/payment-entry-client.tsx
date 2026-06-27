@@ -47,6 +47,8 @@ interface Booking {
   bookingDate: string;
   startTime: string | null;
   endTime: string | null;
+  turfName?: string | null;
+  venueName?: string | null;
   totalAmount: number;
   baseAmount: number;
   paidAmount: number;
@@ -94,6 +96,12 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
             {booking.startTime && ` · ${booking.startTime}`}
             {booking.endTime && ` - ${booking.endTime}`}
           </p>
+          {booking.turfName && (
+            <p className="text-sm font-semibold text-slate-800">{booking.turfName}</p>
+          )}
+          {booking.venueName && (
+            <p className="text-xs text-slate-400">{booking.venueName}</p>
+          )}
         </CardHeader>
         <CardContent className="space-y-2">
           <div className="flex justify-between text-sm">

@@ -19,7 +19,7 @@ function normalizeTime(value: string | null | undefined) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Same calendar date, venue, start time, and end time. */
+/** Same calendar date, venue, turf, start time, and end time. */
 export function getBookingSlotKey(
   booking: Pick<
     BookingSlotFields,
@@ -32,7 +32,7 @@ export function getBookingSlotKey(
   const start = normalizeTime(booking.startTime);
   const end = normalizeTime(booking.endTime || booking.startTime);
 
-  if (!date || !venue || !start) return null;
+  if (!date || !venue || !turf || !start) return null;
   return `${date}|${venue}|${turf}|${start}|${end}`;
 }
 

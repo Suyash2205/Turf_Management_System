@@ -155,7 +155,10 @@ export function AdminBookingVerifyClient({
             {booking.endTime && ` - ${booking.endTime}`}
           </p>
           {booking.turfName && (
-            <p className="text-xs text-slate-400">{booking.turfName}</p>
+            <p className="text-sm font-semibold text-slate-800">{booking.turfName}</p>
+          )}
+          {booking.venueName && (
+            <p className="text-xs text-slate-400">{booking.venueName}</p>
           )}
           {booking.customerPhone && (
             <p className="text-sm text-slate-500">{booking.customerPhone}</p>
