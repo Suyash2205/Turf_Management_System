@@ -11,7 +11,7 @@ import {
   BookingExtrasForm,
 } from "@/components/booking-extras-form";
 import { canRecordPayment } from "@/lib/payment-access";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatBookingTimeRange } from "@/lib/utils";
 import { useState } from "react";
 import {
   DoubleBookingBadge,
@@ -93,8 +93,8 @@ export function PaymentEntryClient({ booking: initialBooking }: { booking: Booki
           </div>
           <p className="text-sm text-slate-500">
             {formatDate(booking.bookingDate)}
-            {booking.startTime && ` · ${booking.startTime}`}
-            {booking.endTime && ` - ${booking.endTime}`}
+            {booking.startTime &&
+              ` · ${formatBookingTimeRange(booking.startTime, booking.endTime)}`}
           </p>
           {booking.turfName && (
             <p className="text-sm font-semibold text-slate-800">{booking.turfName}</p>

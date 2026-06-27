@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CollapsibleSection } from "@/components/collapsible-section";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatTime } from "@/lib/utils";
 import { addHoursToTime } from "@/lib/booking-time";
 import { useLoading } from "@/components/loading-provider";
 
@@ -151,7 +151,7 @@ export function BookingExtrasForm({
       });
 
       const endNote =
-        booking?.endTime ? ` End time: ${booking.endTime}.` : "";
+        booking?.endTime ? ` End time: ${formatTime(booking.endTime)}.` : "";
       setHoursSuccess(
         booking
           ? `Extra ${hours} hr${hours === 1 ? "" : "s"} — ${formatCurrency(amount)} added.${endNote} New total: ${formatCurrency(booking.totalAmount)}`
@@ -328,9 +328,9 @@ export function BookingExtrasForm({
           {previewEndTime && (
             <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
               New end time:{" "}
-              <span className="font-semibold">{previewEndTime}</span>
+              <span className="font-semibold">{formatTime(previewEndTime)}</span>
               {endTime && endTime !== previewEndTime && (
-                <span className="text-slate-500"> (was {endTime})</span>
+                <span className="text-slate-500"> (was {formatTime(endTime)})</span>
               )}
             </p>
           )}

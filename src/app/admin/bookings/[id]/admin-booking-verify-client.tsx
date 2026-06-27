@@ -10,7 +10,7 @@ import { paymentStatusBadge } from "@/components/ui/badge";
 import { PaymentRecordForm } from "@/components/payment-record-form";
 import { PaymentHistoryItem } from "@/components/payment-history-item";
 import { canRecordPayment } from "@/lib/payment-access";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatBookingTimeRange } from "@/lib/utils";
 import {
   VerifyPaymentButtons,
   type VerifyAction,
@@ -152,8 +152,8 @@ export function AdminBookingVerifyClient({
           </div>
           <p className="text-sm text-slate-500">
             {formatDate(booking.bookingDate)}
-            {booking.startTime && ` · ${booking.startTime}`}
-            {booking.endTime && ` - ${booking.endTime}`}
+            {booking.startTime &&
+              ` · ${formatBookingTimeRange(booking.startTime, booking.endTime)}`}
           </p>
           {booking.turfName && (
             <p className="text-sm font-semibold text-slate-800">{booking.turfName}</p>

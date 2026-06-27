@@ -38,6 +38,39 @@ export function formatMinutesToTime(totalMinutes: number): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
+/** Format minutes from midnight as "7:00 PM". */
+export function formatMinutesTo12h(totalMinutes: number): string {
+  const normalized =
+    ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hours24 = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  const period = hours24 >= 12 ? "PM" : "AM";
+  let hour12 = hours24 % 12;
+  if (hour12 === 0) hour12 = 12;
+  return `${hour12}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
+/** Show stored booking time as "19:00 (7:00 PM)". */
+export function formatBookingTimeDisplay(
+  time: string | null | undefined
+): string {
+  if (!time) return "";
+
+  const minutes = parseBookingTimeToMinutes(time);
+  if (minutes == null) return time;
+
+  return `${formatMinutesToTime(minutes)} (${formatMinutesTo12h(minutes)})`;
+}
+
+export function formatBookingTimeRange(
+  start: string | null | undefined,
+  end?: string | null | undefined
+): string {
+  if (!start) return "";
+  if (!end) return formatBookingTimeDisplay(start);
+  return `${formatBookingTimeDisplay(start)} – ${formatBookingTimeDisplay(end)}`;
+}
+
 export function getBookingTimeRange(
   booking: {
     startTime: string | null | undefined;

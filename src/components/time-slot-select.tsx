@@ -1,5 +1,6 @@
 "use client";
 
+import { formatBookingTimeDisplay } from "@/lib/booking-time";
 import { cn } from "@/lib/utils";
 
 const selectClassName =
@@ -32,7 +33,7 @@ export function TimeSlotSelect({
         <option value="">{placeholder}</option>
         {options.map((slot) => (
           <option key={slot} value={slot}>
-            {slot}
+            {formatBookingTimeDisplay(slot)}
           </option>
         ))}
       </select>

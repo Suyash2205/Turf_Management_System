@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge, paymentStatusBadge } from "@/components/ui/badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatBookingTimeRange } from "@/lib/utils";
 import { useLoading } from "@/components/loading-provider";
 import { EmailSyncStatus } from "@/components/email-sync-status";
 import {
@@ -219,8 +219,8 @@ export function BookingsClient({
                         </div>
                         <p className="text-sm text-slate-500">
                           {formatDate(booking.bookingDate)}
-                          {booking.startTime && ` · ${booking.startTime}`}
-                          {booking.endTime && ` - ${booking.endTime}`}
+                          {booking.startTime &&
+                            ` · ${formatBookingTimeRange(booking.startTime, booking.endTime)}`}
                         </p>
                         {booking.turfName && (
                           <p className="text-sm font-semibold text-slate-800">

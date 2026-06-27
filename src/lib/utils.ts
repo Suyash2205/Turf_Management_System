@@ -1,5 +1,11 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import {
+  formatBookingTimeDisplay,
+  formatBookingTimeRange,
+} from "@/lib/booking-time";
+
+export { formatBookingTimeDisplay, formatBookingTimeRange };
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -23,6 +29,5 @@ export function formatDate(date: Date | string) {
 }
 
 export function formatTime(time: string | null | undefined) {
-  if (!time) return "";
-  return time;
+  return formatBookingTimeDisplay(time);
 }
