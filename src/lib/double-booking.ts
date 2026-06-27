@@ -1,4 +1,5 @@
 import { startOfDay, endOfDay } from "date-fns";
+import { bookingTimesOverlap } from "@/lib/booking-time";
 import { prisma } from "@/lib/db";
 
 export type BookingSlotFields = {
@@ -14,49 +15,58 @@ function formatDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function normalizeTime(value: string | null | undefined) {
-  if (!value) return "";
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
+function normalizeText(value: string | null | undefined) {
+  return (value || "").trim().toLowerCase();
 }
 
-/** Same calendar date, venue, turf, start time, and end time. */
-export function getBookingSlotKey(
-  booking: Pick<
+function sameBookingContext(
+  a: Pick<
     BookingSlotFields,
-    "bookingDate" | "startTime" | "endTime" | "venueName" | "turfName"
+    "bookingDate" | "venueName" | "turfName" | "startTime"
+  >,
+  b: Pick<
+    BookingSlotFields,
+    "bookingDate" | "venueName" | "turfName" | "startTime"
   >
 ) {
-  const date = formatDateKey(booking.bookingDate);
-  const venue = (booking.venueName || "").trim().toLowerCase();
-  const turf = (booking.turfName || "").trim().toLowerCase();
-  const start = normalizeTime(booking.startTime);
-  const end = normalizeTime(booking.endTime || booking.startTime);
+  if (formatDateKey(a.bookingDate) !== formatDateKey(b.bookingDate)) {
+    return false;
+  }
 
-  if (!date || !venue || !turf || !start) return null;
-  return `${date}|${venue}|${turf}|${start}|${end}`;
+  const venue = normalizeText(a.venueName);
+  const turf = normalizeText(a.turfName);
+  if (!venue || !turf || !a.startTime?.trim() || !b.startTime?.trim()) {
+    return false;
+  }
+
+  return venue === normalizeText(b.venueName) && turf === normalizeText(b.turfName);
+}
+
+export function bookingsConflict(
+  a: BookingSlotFields,
+  b: BookingSlotFields
+) {
+  if (a.id === b.id) return false;
+  if (!sameBookingContext(a, b)) return false;
+  return bookingTimesOverlap(a, b);
 }
 
 export function markDoubleBookingFlags<T extends BookingSlotFields>(
   bookings: T[]
 ): Map<string, boolean> {
-  const idsByKey = new Map<string, string[]>();
-
-  for (const booking of bookings) {
-    const key = getBookingSlotKey(booking);
-    if (!key) continue;
-    const ids = idsByKey.get(key) ?? [];
-    ids.push(booking.id);
-    idsByKey.set(key, ids);
-  }
-
   const flags = new Map<string, boolean>();
+
   for (const booking of bookings) {
-    const key = getBookingSlotKey(booking);
-    if (!key) {
-      flags.set(booking.id, false);
-      continue;
+    let isDouble = false;
+
+    for (const other of bookings) {
+      if (bookingsConflict(booking, other)) {
+        isDouble = true;
+        break;
+      }
     }
-    flags.set(booking.id, (idsByKey.get(key)?.length ?? 0) > 1);
+
+    flags.set(booking.id, isDouble);
   }
 
   return flags;
@@ -76,16 +86,19 @@ export async function bookingHasDoubleBooking(bookingId: string) {
   });
   if (!booking) return false;
 
-  const key = getBookingSlotKey(booking);
-  if (!key) return false;
+  if (!booking.turfName?.trim() || !booking.startTime?.trim()) {
+    return false;
+  }
 
   const sameDay = await prisma.booking.findMany({
     where: {
+      id: { not: bookingId },
       bookingDate: {
         gte: startOfDay(booking.bookingDate),
         lte: endOfDay(booking.bookingDate),
       },
       venueName: booking.venueName,
+      turfName: booking.turfName,
     },
     select: {
       id: true,
@@ -97,7 +110,5 @@ export async function bookingHasDoubleBooking(bookingId: string) {
     },
   });
 
-  return sameDay.some(
-    (other) => other.id !== bookingId && getBookingSlotKey(other) === key
-  );
+  return sameDay.some((other) => bookingsConflict(booking, other));
 }

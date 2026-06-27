@@ -1,18 +1,10 @@
-import { parseTimeToMinutes } from "@/lib/booking-time";
+import {
+  formatMinutesToTime,
+  parseBookingTimeToMinutes,
+} from "@/lib/booking-time";
 import { isToday, parseISO } from "date-fns";
 
-function formatMinutes12h(totalMinutes: number) {
-  const normalized =
-    ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
-  const hours24 = Math.floor(normalized / 60);
-  const minutes = normalized % 60;
-  const period = hours24 >= 12 ? "PM" : "AM";
-  let hour12 = hours24 % 12;
-  if (hour12 === 0) hour12 = 12;
-  return `${hour12}:${String(minutes).padStart(2, "0")} ${period}`;
-}
-
-/** 30-minute slots from 6:00 AM through 11:30 PM (12-hour labels). */
+/** 30-minute slots from 06:00 through 23:30 (24-hour labels, same as Khelomore). */
 export function buildBookingTimeSlots(
   startMinutes = 6 * 60,
   endMinutes = 23 * 60 + 30,
@@ -20,7 +12,7 @@ export function buildBookingTimeSlots(
 ) {
   const slots: string[] = [];
   for (let m = startMinutes; m <= endMinutes; m += stepMinutes) {
-    slots.push(formatMinutes12h(m));
+    slots.push(formatMinutesToTime(m));
   }
   return slots;
 }
@@ -32,7 +24,16 @@ function roundDownTo30Minutes(date: Date) {
   return Math.floor(total / 30) * 30;
 }
 
-/** Start-time list: from current 30-min slot when booking is today, else full day. */
+/** Put the current 30-min slot first for today; all times remain selectable. */
+function rotateSlotsFromMinutes(slots: string[], fromMinutes: number) {
+  const idx = slots.findIndex(
+    (slot) => parseBookingTimeToMinutes(slot) === fromMinutes
+  );
+  if (idx <= 0) return slots;
+  return [...slots.slice(idx), ...slots.slice(0, idx)];
+}
+
+/** Start-time list: current slot first when booking is today, otherwise chronological. */
 export function getStartTimeOptions(
   bookingDate: string,
   allSlots = BOOKING_TIME_SLOTS
@@ -42,41 +43,22 @@ export function getStartTimeOptions(
   const date = parseISO(`${bookingDate}T12:00:00`);
   if (!isToday(date)) return allSlots;
 
-  const fromMinutes = roundDownTo30Minutes(new Date());
-  const filtered = allSlots.filter((slot) => {
-    const minutes = parse12hTime(slot);
-    return minutes != null && minutes >= fromMinutes;
-  });
-
-  return filtered.length > 0 ? filtered : allSlots;
-}
-
-function parse12hTime(time: string): number | null {
-  const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return parseTimeToMinutes(time);
-
-  let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const period = match[3].toUpperCase();
-  if (hours > 12 || minutes > 59) return null;
-  if (period === "PM" && hours !== 12) hours += 12;
-  if (period === "AM" && hours === 12) hours = 0;
-  return hours * 60 + minutes;
+  return rotateSlotsFromMinutes(allSlots, roundDownTo30Minutes(new Date()));
 }
 
 export function isEndTimeAfterStart(startTime: string, endTime: string) {
-  const start = parse12hTime(startTime);
-  const end = parse12hTime(endTime);
+  const start = parseBookingTimeToMinutes(startTime);
+  const end = parseBookingTimeToMinutes(endTime);
   if (start == null || end == null) return true;
   return end > start;
 }
 
 export function getEndTimeOptions(startTime: string, slots = BOOKING_TIME_SLOTS) {
   if (!startTime) return slots;
-  const start = parse12hTime(startTime);
+  const start = parseBookingTimeToMinutes(startTime);
   if (start == null) return slots;
   return slots.filter((slot) => {
-    const end = parse12hTime(slot);
+    const end = parseBookingTimeToMinutes(slot);
     return end != null && end > start;
   });
 }

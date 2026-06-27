@@ -60,13 +60,6 @@ export function AddBookingForm({
 
   function handleBookingDateChange(value: string) {
     setBookingDate(value);
-    if (!startTime) return;
-
-    const allowedStarts = getStartTimeOptions(value);
-    if (!allowedStarts.includes(startTime)) {
-      setStartTime("");
-      setEndTime("");
-    }
   }
 
   function handleStartTimeChange(value: string) {
