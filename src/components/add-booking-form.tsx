@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { TimeSlotSelect, TurfSelect } from "@/components/time-slot-select";
-import { BOOKING_TIME_SLOTS, getEndTimeOptions } from "@/lib/booking-slot-times";
+import { BOOKING_TIME_SLOTS, getEndTimeOptions, getStartTimeOptions } from "@/lib/booking-slot-times";
 import { TURF_OPTIONS } from "@/lib/turf-options";
 
 type AddBookingFormProps = {
@@ -37,10 +37,26 @@ export function AddBookingForm({
   const [externalId, setExternalId] = useState("");
   const [paidOnKhelomore, setPaidOnKhelomore] = useState(false);
 
+  const startTimeOptions = useMemo(
+    () => getStartTimeOptions(bookingDate),
+    [bookingDate]
+  );
+
   const endTimeOptions = useMemo(
     () => getEndTimeOptions(startTime, BOOKING_TIME_SLOTS),
     [startTime]
   );
+
+  function handleBookingDateChange(value: string) {
+    setBookingDate(value);
+    if (!startTime) return;
+
+    const allowedStarts = getStartTimeOptions(value);
+    if (!allowedStarts.includes(startTime)) {
+      setStartTime("");
+      setEndTime("");
+    }
+  }
 
   function handleStartTimeChange(value: string) {
     setStartTime(value);
@@ -160,7 +176,7 @@ export function AddBookingForm({
             <Input
               type="date"
               value={bookingDate}
-              onChange={(e) => setBookingDate(e.target.value)}
+              onChange={(e) => handleBookingDateChange(e.target.value)}
               required
             />
           </label>
@@ -194,7 +210,7 @@ export function AddBookingForm({
             label="Start time"
             value={startTime}
             onChange={handleStartTimeChange}
-            options={BOOKING_TIME_SLOTS}
+            options={startTimeOptions}
             placeholder="Select start"
           />
 

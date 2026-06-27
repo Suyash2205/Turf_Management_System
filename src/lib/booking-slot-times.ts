@@ -1,4 +1,5 @@
 import { parseTimeToMinutes } from "@/lib/booking-time";
+import { isToday, parseISO } from "date-fns";
 
 function formatMinutes12h(totalMinutes: number) {
   const normalized =
@@ -25,6 +26,30 @@ export function buildBookingTimeSlots(
 }
 
 export const BOOKING_TIME_SLOTS = buildBookingTimeSlots();
+
+function roundDownTo30Minutes(date: Date) {
+  const total = date.getHours() * 60 + date.getMinutes();
+  return Math.floor(total / 30) * 30;
+}
+
+/** Start-time list: from current 30-min slot when booking is today, else full day. */
+export function getStartTimeOptions(
+  bookingDate: string,
+  allSlots = BOOKING_TIME_SLOTS
+) {
+  if (!bookingDate) return allSlots;
+
+  const date = parseISO(`${bookingDate}T12:00:00`);
+  if (!isToday(date)) return allSlots;
+
+  const fromMinutes = roundDownTo30Minutes(new Date());
+  const filtered = allSlots.filter((slot) => {
+    const minutes = parse12hTime(slot);
+    return minutes != null && minutes >= fromMinutes;
+  });
+
+  return filtered.length > 0 ? filtered : allSlots;
+}
 
 function parse12hTime(time: string): number | null {
   const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
