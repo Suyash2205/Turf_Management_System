@@ -54,6 +54,7 @@ interface Booking {
   startTime: string | null;
   endTime: string | null;
   turfName?: string | null;
+  venueName?: string | null;
   totalAmount: number;
   baseAmount: number;
   paidAmount: number;
