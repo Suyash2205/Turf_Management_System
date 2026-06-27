@@ -3,6 +3,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { serializeBookingListItem } from "@/lib/bookings";
 import { markDoubleBookingFlags } from "@/lib/double-booking";
+import { logAudit } from "@/lib/audit-log";
+import {
+  buildManualBookingEmailMessageId,
+  parseManualBookingBody,
+} from "@/lib/manual-booking";
 import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET(request: Request) {
@@ -68,26 +73,102 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session || session.user.role !== "ADMIN") {
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();
+  const parsed = parseManualBookingBody(body);
+  if ("error" in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+
+  if (parsed.externalId) {
+    const existing = await prisma.booking.findFirst({
+      where: {
+        OR: [
+          { externalId: parsed.externalId },
+          { externalId: { startsWith: `${parsed.externalId}#` } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: "A booking with this Khelomore ID already exists" },
+        { status: 409 }
+      );
+    }
+  }
+
+  const defaultVenue = process.env.KHELOMORE_VENUE_NAME?.trim();
+  const paidOnKhelomore = parsed.paidOnKhelomore ?? false;
+
   const booking = await prisma.booking.create({
     data: {
-      customerName: body.customerName,
-      customerPhone: body.customerPhone,
-      bookingDate: new Date(body.bookingDate),
-      startTime: body.startTime,
-      endTime: body.endTime,
-      totalAmount: body.totalAmount,
-      paidOnKhelomore: body.paidOnKhelomore ?? false,
-      paymentStatus: body.paidOnKhelomore ? "COMPLETED" : "PENDING",
+      customerName: parsed.customerName,
+      customerPhone: parsed.customerPhone,
+      customerEmail: parsed.customerEmail,
+      bookingDate: new Date(parsed.bookingDate),
+      startTime: parsed.startTime,
+      endTime: parsed.endTime,
+      venueName: parsed.venueName || defaultVenue || null,
+      turfName: parsed.turfName,
+      location: parsed.location,
+      slotPrice: parsed.slotPrice ?? parsed.totalAmount,
+      couponAmount: parsed.couponAmount,
+      totalAmount: parsed.totalAmount,
+      externalId: parsed.externalId,
+      paidOnKhelomore,
+      paymentStatus: paidOnKhelomore ? "COMPLETED" : "PENDING",
+      emailMessageId: buildManualBookingEmailMessageId(),
+      rawEmailSubject: `Manual entry by ${session.user.email}`,
     },
     include: {
       payments: { select: { amount: true, verificationStatus: true } },
     },
   });
 
-  return NextResponse.json(serializeBookingListItem(booking), { status: 201 });
+  await logAudit({
+    action: "BOOKING_CREATED",
+    session,
+    summary: `${session.user.email} manually added booking for ${booking.customerName} on ${parsed.bookingDate}${
+      parsed.startTime ? ` (${parsed.startTime}${parsed.endTime ? `–${parsed.endTime}` : ""})` : ""
+    }`,
+    entityType: "booking",
+    entityId: booking.externalId ?? booking.id,
+    bookingId: booking.id,
+    details: {
+      customerName: booking.customerName,
+      customerPhone: booking.customerPhone,
+      bookingDate: parsed.bookingDate,
+      startTime: parsed.startTime,
+      endTime: parsed.endTime,
+      venueName: booking.venueName,
+      turfName: booking.turfName,
+      totalAmount: parsed.totalAmount,
+      externalId: booking.externalId,
+      paidOnKhelomore,
+    },
+    request,
+  });
+
+  const doubleFlags = markDoubleBookingFlags([
+    {
+      id: booking.id,
+      bookingDate: booking.bookingDate,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      venueName: booking.venueName,
+    },
+  ]);
+
+  return NextResponse.json(
+    {
+      ...serializeBookingListItem(booking),
+      venueName: booking.venueName,
+      isDoubleBooking: doubleFlags.get(booking.id) ?? false,
+    },
+    { status: 201 }
+  );
 }

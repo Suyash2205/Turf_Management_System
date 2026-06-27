@@ -37,6 +37,7 @@ const ACTION_OPTIONS = [
   { value: "BOOKING_EXTRA_UPDATED", label: "Extra updated" },
   { value: "BOOKING_EXTRA_REMOVED", label: "Extra removed" },
   { value: "BOOKING_EXTRA_HOURS_ADDED", label: "Extra hours added" },
+  { value: "BOOKING_CREATED", label: "Booking added" },
   { value: "EMAIL_SYNC", label: "Email sync" },
   { value: "BOOKING_CANCELLED", label: "Booking cancelled" },
   { value: "BOOKING_DELETED", label: "Booking removed" },

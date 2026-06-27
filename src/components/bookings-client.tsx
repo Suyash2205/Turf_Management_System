@@ -16,6 +16,7 @@ import {
   DoubleBookingBadge,
   doubleBookingCardClass,
 } from "@/components/double-booking-badge";
+import { AddBookingForm } from "@/components/add-booking-form";
 
 interface Booking {
   id: string;
@@ -35,7 +36,13 @@ interface Booking {
   isDoubleBooking?: boolean;
 }
 
-export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" }) {
+export function BookingsClient({
+  mode = "staff",
+  defaultVenueName = "Lush Sports",
+}: {
+  mode?: "staff" | "admin";
+  defaultVenueName?: string;
+}) {
   const searchParams = useSearchParams();
   const isAdmin = mode === "admin";
 
@@ -51,12 +58,13 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
   const [activeId, setActiveId] = useState<string | null>(null);
   const { run } = useLoading();
 
-  async function loadBookings() {
+  async function loadBookings(forDate?: string) {
     setLoading(true);
+    const listDate = forDate ?? date;
     try {
       await run(async () => {
         const params = new URLSearchParams();
-        if (!verifyFilter) params.set("date", date);
+        if (!verifyFilter) params.set("date", listDate);
         if (statusFilter) params.set("status", statusFilter);
         if (verifyFilter) params.set("verify", "pending");
         const res = await fetch(`/api/bookings?${params}`);
@@ -92,7 +100,7 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
         </div>
         <Button
           variant="outline"
-          onClick={loadBookings}
+          onClick={() => void loadBookings()}
           disabled={loading}
           className="w-full sm:w-auto"
         >
@@ -135,6 +143,14 @@ export function BookingsClient({ mode = "staff" }: { mode?: "staff" | "admin" })
           </button>
         )}
       </div>
+
+      <AddBookingForm
+        defaultVenueName={defaultVenueName}
+        onCreated={(_bookingId, bookingDate) => {
+          if (bookingDate) setDate(bookingDate);
+          void loadBookings(bookingDate);
+        }}
+      />
 
       {loading ? (
         <p className="text-slate-500">Loading bookings...</p>
