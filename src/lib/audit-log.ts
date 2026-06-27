@@ -89,6 +89,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   BOOKING_EXTRA_REMOVED: "Extra charge removed",
   BOOKING_EXTRA_HOURS_ADDED: "Extra hours added",
   EMAIL_SYNC: "Email sync",
+  BOOKING_CANCELLED: "Booking cancelled",
   BANK_STATEMENT_UPLOADED: "Bank statement uploaded",
 };
 

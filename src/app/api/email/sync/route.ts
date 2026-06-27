@@ -46,11 +46,12 @@ async function handleSync(request: Request) {
       await logAudit({
         action: "EMAIL_SYNC",
         session,
-        summary: `${session.user.email} synced emails (${result.bookingsCreated} new bookings from ${result.emailsFound} emails)`,
+        summary: `${session.user.email} synced emails (${result.bookingsCreated} new, ${result.bookingsCancelled} cancelled from ${result.emailsFound} emails)`,
         details: {
           fullSync,
           emailsFound: result.emailsFound,
           bookingsCreated: result.bookingsCreated,
+          bookingsCancelled: result.bookingsCancelled,
           emailsSkipped: result.emailsSkipped,
         },
         request,

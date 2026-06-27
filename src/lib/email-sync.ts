@@ -229,7 +229,11 @@ export async function syncBookingsFromEmail(
         if (cancelledBookings !== null) {
           bookingsCancelled += await removeCancelledBookings(
             externalId,
-            cancelledBookings
+            cancelledBookings,
+            {
+              emailSubject: candidate.subject,
+              source: "email-sync",
+            }
           );
           continue;
         }

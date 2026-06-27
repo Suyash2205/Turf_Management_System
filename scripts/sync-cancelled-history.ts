@@ -62,7 +62,10 @@ async function processBatch(since: Date, before?: Date) {
 
       cancelledEmails++;
       const externalId = parseBookingId(subject, body);
-      removed += await removeCancelledBookings(externalId, cancelledBookings);
+      removed += await removeCancelledBookings(externalId, cancelledBookings, {
+        emailSubject: subject,
+        source: "cancelled-history-script",
+      });
     }
   } finally {
     lock.release();
