@@ -1,3 +1,5 @@
+import { isEndTimeAfterStart } from "@/lib/booking-slot-times";
+
 export type ManualBookingInput = {
   customerName: string;
   customerPhone?: string;
@@ -7,7 +9,6 @@ export type ManualBookingInput = {
   endTime?: string;
   venueName?: string;
   turfName?: string;
-  location?: string;
   slotPrice?: number;
   couponAmount?: number;
   totalAmount: number;
@@ -40,6 +41,9 @@ export function parseManualBookingBody(
   if (!customerName) {
     return { error: "Customer name is required" };
   }
+  if (!readString(data.turfName)) {
+    return { error: "Select a turf" };
+  }
   if (!bookingDate || Number.isNaN(Date.parse(bookingDate))) {
     return { error: "Enter a valid booking date" };
   }
@@ -53,7 +57,11 @@ export function parseManualBookingBody(
   const startTime = readString(data.startTime) || undefined;
   const endTime = readString(data.endTime) || undefined;
 
-  if (startTime && endTime && startTime >= endTime) {
+  if (
+    startTime &&
+    endTime &&
+    !isEndTimeAfterStart(startTime, endTime)
+  ) {
     return { error: "End time must be after start time" };
   }
 
@@ -66,7 +74,6 @@ export function parseManualBookingBody(
     endTime,
     venueName: readString(data.venueName) || undefined,
     turfName: readString(data.turfName) || undefined,
-    location: readString(data.location) || undefined,
     slotPrice,
     couponAmount,
     totalAmount,

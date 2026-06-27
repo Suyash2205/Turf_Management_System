@@ -8,6 +8,8 @@ import {
   buildManualBookingEmailMessageId,
   parseManualBookingBody,
 } from "@/lib/manual-booking";
+import { TURF_OPTIONS } from "@/lib/turf-options";
+import { isEndTimeAfterStart } from "@/lib/booking-slot-times";
 import { startOfDay, endOfDay } from "date-fns";
 
 export async function GET(request: Request) {
@@ -83,6 +85,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
+  if (!parsed.turfName || !TURF_OPTIONS.includes(parsed.turfName as (typeof TURF_OPTIONS)[number])) {
+    return NextResponse.json({ error: "Select a valid turf" }, { status: 400 });
+  }
+
+  if (
+    parsed.startTime &&
+    parsed.endTime &&
+    !isEndTimeAfterStart(parsed.startTime, parsed.endTime)
+  ) {
+    return NextResponse.json(
+      { error: "End time must be after start time" },
+      { status: 400 }
+    );
+  }
+
   if (parsed.externalId) {
     const existing = await prisma.booking.findFirst({
       where: {
@@ -114,7 +131,6 @@ export async function POST(request: Request) {
       endTime: parsed.endTime,
       venueName: parsed.venueName || defaultVenue || null,
       turfName: parsed.turfName,
-      location: parsed.location,
       slotPrice: parsed.slotPrice ?? parsed.totalAmount,
       couponAmount: parsed.couponAmount,
       totalAmount: parsed.totalAmount,
@@ -160,6 +176,7 @@ export async function POST(request: Request) {
       startTime: booking.startTime,
       endTime: booking.endTime,
       venueName: booking.venueName,
+      turfName: booking.turfName,
     },
   ]);
 

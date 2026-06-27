@@ -7,6 +7,7 @@ export type BookingSlotFields = {
   startTime: string | null;
   endTime: string | null;
   venueName: string | null;
+  turfName?: string | null;
 };
 
 function formatDateKey(date: Date) {
@@ -22,16 +23,17 @@ function normalizeTime(value: string | null | undefined) {
 export function getBookingSlotKey(
   booking: Pick<
     BookingSlotFields,
-    "bookingDate" | "startTime" | "endTime" | "venueName"
+    "bookingDate" | "startTime" | "endTime" | "venueName" | "turfName"
   >
 ) {
   const date = formatDateKey(booking.bookingDate);
   const venue = (booking.venueName || "").trim().toLowerCase();
+  const turf = (booking.turfName || "").trim().toLowerCase();
   const start = normalizeTime(booking.startTime);
   const end = normalizeTime(booking.endTime || booking.startTime);
 
   if (!date || !venue || !start) return null;
-  return `${date}|${venue}|${start}|${end}`;
+  return `${date}|${venue}|${turf}|${start}|${end}`;
 }
 
 export function markDoubleBookingFlags<T extends BookingSlotFields>(
@@ -69,6 +71,7 @@ export async function bookingHasDoubleBooking(bookingId: string) {
       startTime: true,
       endTime: true,
       venueName: true,
+      turfName: true,
     },
   });
   if (!booking) return false;
@@ -90,6 +93,7 @@ export async function bookingHasDoubleBooking(bookingId: string) {
       startTime: true,
       endTime: true,
       venueName: true,
+      turfName: true,
     },
   });
 

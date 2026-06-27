@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CalendarPlus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CollapsibleSection } from "@/components/collapsible-section";
+import { TimeSlotSelect, TurfSelect } from "@/components/time-slot-select";
+import { BOOKING_TIME_SLOTS, getEndTimeOptions } from "@/lib/booking-slot-times";
+import { TURF_OPTIONS } from "@/lib/turf-options";
 
 type AddBookingFormProps = {
   defaultVenueName: string;
@@ -28,12 +31,23 @@ export function AddBookingForm({
   const [endTime, setEndTime] = useState("");
   const [venueName, setVenueName] = useState(defaultVenueName);
   const [turfName, setTurfName] = useState("");
-  const [location, setLocation] = useState("");
   const [slotPrice, setSlotPrice] = useState("");
   const [couponAmount, setCouponAmount] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
   const [externalId, setExternalId] = useState("");
   const [paidOnKhelomore, setPaidOnKhelomore] = useState(false);
+
+  const endTimeOptions = useMemo(
+    () => getEndTimeOptions(startTime, BOOKING_TIME_SLOTS),
+    [startTime]
+  );
+
+  function handleStartTimeChange(value: string) {
+    setStartTime(value);
+    if (endTime && value && !getEndTimeOptions(value).includes(endTime)) {
+      setEndTime("");
+    }
+  }
 
   function resetForm() {
     setCustomerName("");
@@ -44,7 +58,6 @@ export function AddBookingForm({
     setEndTime("");
     setVenueName(defaultVenueName);
     setTurfName("");
-    setLocation("");
     setSlotPrice("");
     setCouponAmount("");
     setTotalAmount("");
@@ -72,8 +85,7 @@ export function AddBookingForm({
           startTime: startTime || undefined,
           endTime: endTime || undefined,
           venueName: venueName || undefined,
-          turfName: turfName || undefined,
-          location: location || undefined,
+          turfName,
           slotPrice: slotPrice ? parseFloat(slotPrice) : undefined,
           couponAmount: couponAmount ? parseFloat(couponAmount) : undefined,
           totalAmount: parseFloat(totalAmount),
@@ -162,23 +174,12 @@ export function AddBookingForm({
             />
           </label>
 
-          <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">Start time</span>
-            <Input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-            />
-          </label>
-
-          <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">End time</span>
-            <Input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-            />
-          </label>
+          <TurfSelect
+            value={turfName}
+            onChange={setTurfName}
+            options={TURF_OPTIONS}
+            required
+          />
 
           <label className="space-y-1">
             <span className="text-sm font-medium text-slate-700">Venue</span>
@@ -189,23 +190,21 @@ export function AddBookingForm({
             />
           </label>
 
-          <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">Turf / court</span>
-            <Input
-              value={turfName}
-              onChange={(e) => setTurfName(e.target.value)}
-              placeholder="e.g. Box 1"
-            />
-          </label>
+          <TimeSlotSelect
+            label="Start time"
+            value={startTime}
+            onChange={handleStartTimeChange}
+            options={BOOKING_TIME_SLOTS}
+            placeholder="Select start"
+          />
 
-          <label className="space-y-1 sm:col-span-2">
-            <span className="text-sm font-medium text-slate-700">Location</span>
-            <Input
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Address or area"
-            />
-          </label>
+          <TimeSlotSelect
+            label="End time"
+            value={endTime}
+            onChange={setEndTime}
+            options={endTimeOptions}
+            placeholder={startTime ? "Select end" : "Select start first"}
+          />
 
           <label className="space-y-1">
             <span className="text-sm font-medium text-slate-700">Slot price (₹)</span>
