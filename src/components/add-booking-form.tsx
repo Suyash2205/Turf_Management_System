@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { TimeSlotSelect, TurfSelect } from "@/components/time-slot-select";
 import { BOOKING_TIME_SLOTS, getEndTimeOptions, getStartTimeOptions } from "@/lib/booking-slot-times";
+import { computeManualBookingTotal } from "@/lib/manual-booking";
 import { TURF_OPTIONS } from "@/lib/turf-options";
+import { formatCurrency } from "@/lib/utils";
 
 type AddBookingFormProps = {
   defaultVenueName: string;
@@ -32,10 +34,19 @@ export function AddBookingForm({
   const [venueName, setVenueName] = useState(defaultVenueName);
   const [turfName, setTurfName] = useState("");
   const [slotPrice, setSlotPrice] = useState("");
-  const [couponAmount, setCouponAmount] = useState("");
-  const [totalAmount, setTotalAmount] = useState("");
+  const [discountAmount, setDiscountAmount] = useState("");
   const [externalId, setExternalId] = useState("");
   const [paidOnKhelomore, setPaidOnKhelomore] = useState(false);
+
+  const parsedSlotPrice = slotPrice ? parseFloat(slotPrice) : NaN;
+  const parsedDiscount = discountAmount ? parseFloat(discountAmount) : 0;
+
+  const computedTotal = useMemo(() => {
+    if (!Number.isFinite(parsedSlotPrice) || parsedSlotPrice <= 0) return null;
+    if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0) return null;
+    if (parsedDiscount > parsedSlotPrice) return null;
+    return computeManualBookingTotal(parsedSlotPrice, parsedDiscount);
+  }, [parsedSlotPrice, parsedDiscount]);
 
   const startTimeOptions = useMemo(
     () => getStartTimeOptions(bookingDate),
@@ -75,8 +86,7 @@ export function AddBookingForm({
     setVenueName(defaultVenueName);
     setTurfName("");
     setSlotPrice("");
-    setCouponAmount("");
-    setTotalAmount("");
+    setDiscountAmount("");
     setExternalId("");
     setPaidOnKhelomore(false);
     setError("");
@@ -88,6 +98,12 @@ export function AddBookingForm({
     setLoading(true);
     setError("");
     setSuccess("");
+
+    if (computedTotal == null || computedTotal <= 0) {
+      setError("Enter a valid slot price and discount amount");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch("/api/bookings", {
@@ -102,9 +118,8 @@ export function AddBookingForm({
           endTime: endTime || undefined,
           venueName: venueName || undefined,
           turfName,
-          slotPrice: slotPrice ? parseFloat(slotPrice) : undefined,
-          couponAmount: couponAmount ? parseFloat(couponAmount) : undefined,
-          totalAmount: parseFloat(totalAmount),
+          slotPrice: parsedSlotPrice,
+          couponAmount: parsedDiscount > 0 ? parsedDiscount : undefined,
           externalId: externalId || undefined,
           paidOnKhelomore,
         }),
@@ -223,41 +238,44 @@ export function AddBookingForm({
           />
 
           <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">Slot price (₹)</span>
+            <span className="text-sm font-medium text-slate-700">Slot price (₹) *</span>
             <Input
               type="number"
               min="0"
               step="0.01"
               value={slotPrice}
               onChange={(e) => setSlotPrice(e.target.value)}
-              placeholder="Base slot amount"
+              placeholder="e.g. 2000"
+              required
             />
           </label>
 
           <label className="space-y-1">
-            <span className="text-sm font-medium text-slate-700">Coupon (₹)</span>
+            <span className="text-sm font-medium text-slate-700">Discount amount (₹)</span>
             <Input
               type="number"
               min="0"
               step="0.01"
-              value={couponAmount}
-              onChange={(e) => setCouponAmount(e.target.value)}
-              placeholder="Discount from Khelomore"
+              value={discountAmount}
+              onChange={(e) => setDiscountAmount(e.target.value)}
+              placeholder="e.g. 300"
             />
           </label>
 
-          <label className="space-y-1 sm:col-span-2">
-            <span className="text-sm font-medium text-slate-700">Total amount (₹) *</span>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={totalAmount}
-              onChange={(e) => setTotalAmount(e.target.value)}
-              placeholder="Amount to collect"
-              required
-            />
-          </label>
+          <div className="space-y-1 sm:col-span-2">
+            <span className="text-sm font-medium text-slate-700">Total amount (₹)</span>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-lg font-semibold text-slate-900">
+              {computedTotal != null ? formatCurrency(computedTotal) : "—"}
+            </div>
+            <p className="text-xs text-slate-500">
+              Calculated as slot price minus discount amount.
+            </p>
+            {parsedDiscount > parsedSlotPrice && Number.isFinite(parsedSlotPrice) && (
+              <p className="text-xs text-red-600">
+                Discount cannot be more than slot price.
+              </p>
+            )}
+          </div>
         </div>
 
         <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -273,7 +291,11 @@ export function AddBookingForm({
         {error && <p className="text-sm text-red-600">{error}</p>}
         {success && <p className="text-sm text-emerald-600">{success}</p>}
 
-        <Button type="submit" disabled={loading} className="w-full sm:w-auto">
+        <Button
+          type="submit"
+          disabled={loading || computedTotal == null || computedTotal <= 0}
+          className="w-full sm:w-auto"
+        >
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />

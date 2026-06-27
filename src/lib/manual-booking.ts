@@ -26,6 +26,13 @@ function readOptionalNumber(value: unknown) {
   return Number.isFinite(num) && num >= 0 ? num : undefined;
 }
 
+export function computeManualBookingTotal(
+  slotPrice: number,
+  couponAmount = 0
+) {
+  return Math.max(0, slotPrice - couponAmount);
+}
+
 export function parseManualBookingBody(
   body: unknown
 ): ManualBookingInput | { error: string } {
@@ -36,7 +43,8 @@ export function parseManualBookingBody(
   const data = body as Record<string, unknown>;
   const customerName = readString(data.customerName);
   const bookingDate = readString(data.bookingDate);
-  const totalAmount = readOptionalNumber(data.totalAmount);
+  const slotPrice = readOptionalNumber(data.slotPrice);
+  const couponAmount = readOptionalNumber(data.couponAmount) ?? 0;
 
   if (!customerName) {
     return { error: "Customer name is required" };
@@ -47,12 +55,21 @@ export function parseManualBookingBody(
   if (!bookingDate || Number.isNaN(Date.parse(bookingDate))) {
     return { error: "Enter a valid booking date" };
   }
-  if (totalAmount == null || totalAmount <= 0) {
-    return { error: "Enter a valid total amount" };
+  if (slotPrice == null || slotPrice <= 0) {
+    return { error: "Enter a valid slot price" };
+  }
+  if (couponAmount < 0) {
+    return { error: "Enter a valid discount amount" };
+  }
+  if (couponAmount > slotPrice) {
+    return { error: "Discount cannot be more than slot price" };
   }
 
-  const slotPrice = readOptionalNumber(data.slotPrice);
-  const couponAmount = readOptionalNumber(data.couponAmount);
+  const totalAmount = computeManualBookingTotal(slotPrice, couponAmount);
+  if (totalAmount <= 0) {
+    return { error: "Total amount must be greater than zero" };
+  }
+
   const externalId = readString(data.externalId) || undefined;
   const startTime = readString(data.startTime) || undefined;
   const endTime = readString(data.endTime) || undefined;
@@ -75,7 +92,7 @@ export function parseManualBookingBody(
     venueName: readString(data.venueName) || undefined,
     turfName: readString(data.turfName) || undefined,
     slotPrice,
-    couponAmount,
+    couponAmount: couponAmount > 0 ? couponAmount : undefined,
     totalAmount,
     externalId,
     paidOnKhelomore: data.paidOnKhelomore === true,

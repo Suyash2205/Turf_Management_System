@@ -131,7 +131,7 @@ export async function POST(request: Request) {
       endTime: parsed.endTime,
       venueName: parsed.venueName || defaultVenue || null,
       turfName: parsed.turfName,
-      slotPrice: parsed.slotPrice ?? parsed.totalAmount,
+      slotPrice: parsed.slotPrice,
       couponAmount: parsed.couponAmount,
       totalAmount: parsed.totalAmount,
       externalId: parsed.externalId,

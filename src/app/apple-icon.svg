@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" fill="none">
+  <rect width="180" height="180" rx="40" fill="#14532d"/>
+  <circle cx="90" cy="90" r="58" fill="#b91c1c"/>
+  <path
+    d="M90 32c-23 18-37 49-37 58s14 40 37 58"
+    stroke="#fecaca"
+    stroke-width="8"
+    stroke-linecap="round"
+  />
+  <path
+    d="M90 32c23 18 37 49 37 58s-14 40-37 58"
+    stroke="#fecaca"
+    stroke-width="8"
+    stroke-linecap="round"
+  />
+  <circle cx="90" cy="90" r="58" stroke="#7f1d1d" stroke-width="3"/>
+  <rect x="78" y="118" width="24" height="34" rx="2" fill="#fef3c7" stroke="#92400e" stroke-width="2"/>
+  <rect x="72" y="150" width="36" height="6" rx="1" fill="#fef3c7" stroke="#92400e" stroke-width="1.5"/>
+</svg>
