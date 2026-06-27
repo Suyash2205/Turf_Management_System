@@ -4,6 +4,35 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseBankStatementCsv, matchBankTransactions } from "@/lib/bank-matcher";
 import { logAudit } from "@/lib/audit-log";
+import { MatchStatus } from "@prisma/client";
+
+function serializeStatementList(
+  statement: {
+    id: string;
+    fileName: string;
+    fileUrl: string;
+    statementDate: Date | null;
+    createdAt: Date;
+    uploadedBy: { name: string };
+    transactions: { matchStatus: MatchStatus }[];
+  }
+) {
+  const matchedCount = statement.transactions.filter(
+    (t) => t.matchStatus === MatchStatus.MATCHED
+  ).length;
+
+  return {
+    id: statement.id,
+    fileName: statement.fileName,
+    fileUrl: statement.fileUrl,
+    statementDate: statement.statementDate?.toISOString() ?? null,
+    createdAt: statement.createdAt.toISOString(),
+    uploadedBy: statement.uploadedBy,
+    transactionCount: statement.transactions.length,
+    matchedCount,
+    unmatchedCount: statement.transactions.length - matchedCount,
+  };
+}
 
 export async function GET() {
   const session = await auth();
@@ -14,12 +43,12 @@ export async function GET() {
   const statements = await prisma.bankStatement.findMany({
     include: {
       uploadedBy: { select: { name: true } },
-      _count: { select: { transactions: true } },
+      transactions: { select: { matchStatus: true } },
     },
     orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json(statements);
+  return NextResponse.json(statements.map(serializeStatementList));
 }
 
 export async function POST(request: Request) {

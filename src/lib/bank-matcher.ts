@@ -2,7 +2,7 @@ import Papa from "papaparse";
 import { prisma } from "@/lib/db";
 import { amountsMatch, namesMatch } from "@/lib/ocr";
 import { MatchStatus, VerificationStatus, type UserRole } from "@prisma/client";
-import { toNumber } from "@/lib/bookings";
+import { recalculateBookingStatus, toNumber } from "@/lib/bookings";
 import { logAudit } from "@/lib/audit-log";
 
 export type BankMatchActor = {
@@ -101,12 +101,14 @@ export async function matchBankTransactions(
   });
 
   let matched = 0;
+  const matchedPaymentIds = new Set<string>();
+  const matchedBookingIds = new Set<string>();
 
   for (const txn of transactions) {
     const txnAmount = toNumber(txn.amount);
 
     for (const payment of pendingPayments) {
-      if (payment.bankTransaction) continue;
+      if (payment.bankTransaction || matchedPaymentIds.has(payment.id)) continue;
 
       const photoAmount = payment.extractedAmount
         ? toNumber(payment.extractedAmount)
@@ -160,10 +162,16 @@ export async function matchBankTransactions(
           });
         }
 
+        matchedPaymentIds.add(payment.id);
+        matchedBookingIds.add(payment.bookingId);
         matched++;
         break;
       }
     }
+  }
+
+  for (const bookingId of matchedBookingIds) {
+    await recalculateBookingStatus(bookingId);
   }
 
   return matched;

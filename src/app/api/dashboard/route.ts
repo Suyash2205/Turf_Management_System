@@ -134,6 +134,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing statementId" }, { status: 400 });
   }
 
-  const matched = await matchBankTransactions(statementId);
+  const matched = await matchBankTransactions(statementId, {
+    actorId: session.user.id,
+    actorEmail: session.user.email,
+    actorName: session.user.name,
+    actorRole: session.user.role,
+  });
   return NextResponse.json({ matched });
 }

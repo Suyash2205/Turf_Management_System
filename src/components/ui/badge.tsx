@@ -53,3 +53,12 @@ export function verificationBadge(status: string) {
       return <Badge variant="warning">Pending</Badge>;
   }
 }
+
+export function matchStatusBadge(status: string) {
+  switch (status) {
+    case "MATCHED":
+      return <Badge variant="success">Matched</Badge>;
+    default:
+      return <Badge variant="neutral">Unmatched</Badge>;
+  }
+}
