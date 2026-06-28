@@ -18,6 +18,7 @@
     "sync:email-history": "npx tsx scripts/sync-email-history.ts",
     "reimport:bulk-bookings": "npx tsx scripts/reimport-bulk-bookings.ts",
     "sync:cancelled-history": "npx tsx scripts/sync-cancelled-history.ts",
+    "reimport:full": "npx tsx scripts/full-reimport.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

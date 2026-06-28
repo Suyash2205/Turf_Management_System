@@ -16,6 +16,10 @@ export interface SyncOptions {
   toDaysAgo?: number;
   /** Skip writing EmailSyncLog (used for batched full sync) */
   skipLog?: boolean;
+  /** Import new booking emails only (skip cancellation handling) */
+  bookingsOnly?: boolean;
+  /** Process cancellation/modified emails only */
+  cancellationsOnly?: boolean;
 }
 
 function formatGmailDate(date: Date): string {
@@ -67,13 +71,22 @@ async function searchKhelomoreUids(
   client: ImapFlow,
   since: Date,
   before: Date | undefined,
-  imapHost: string
+  imapHost: string,
+  options?: SyncOptions
 ): Promise<number[]> {
   const venue = process.env.KHELOMORE_VENUE_NAME?.trim();
 
   if (imapHost.includes("gmail")) {
-    let query =
-      'from:info@khelomore.com (subject:"You have a new booking from KheloMore" OR subject:"has been modified")';
+    let query: string;
+    if (options?.cancellationsOnly) {
+      query = 'from:info@khelomore.com subject:"has been modified"';
+    } else if (options?.bookingsOnly) {
+      query =
+        'from:info@khelomore.com subject:"You have a new booking from KheloMore"';
+    } else {
+      query =
+        'from:info@khelomore.com (subject:"You have a new booking from KheloMore" OR subject:"has been modified")';
+    }
     if (venue) query += ` "${venue}"`;
     query += ` after:${formatGmailDate(since)}`;
     if (before) query += ` before:${formatGmailDate(before)}`;
@@ -137,7 +150,7 @@ export async function syncBookingsFromEmail(
     const lock = await client.getMailboxLock("INBOX");
 
     try {
-      const uids = await searchKhelomoreUids(client, since, before, host);
+      const uids = await searchKhelomoreUids(client, since, before, host, options);
 
       if (uids.length === 0) {
         return {
@@ -222,10 +235,9 @@ export async function syncBookingsFromEmail(
         const externalId =
           candidate.externalId || extractExternalId(candidate.subject, body);
 
-        const cancelledBookings = parseKhelomoreCancelledBookings(
-          candidate.subject,
-          body
-        );
+        const cancelledBookings = options?.bookingsOnly
+          ? null
+          : parseKhelomoreCancelledBookings(candidate.subject, body);
         if (cancelledBookings !== null) {
           bookingsCancelled += await removeCancelledBookings(
             externalId,
@@ -237,6 +249,8 @@ export async function syncBookingsFromEmail(
           );
           continue;
         }
+
+        if (options?.cancellationsOnly) continue;
 
         const bookingEntries = parseKhelomoreEmails(candidate.subject, body);
         if (bookingEntries.length === 0) {
