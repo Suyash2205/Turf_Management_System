@@ -7,6 +7,7 @@ import {
   parseKhelomoreCancelledBookings,
   parseKhelomoreEmails,
   parseBookingId,
+  khelomoreChangeEmailSubjectQuery,
 } from "@/lib/email-parser";
 import { removeCancelledBookings } from "@/lib/cancelled-bookings";
 import { BookingPaymentStatus } from "@prisma/client";
@@ -79,13 +80,12 @@ async function searchKhelomoreUids(
   if (imapHost.includes("gmail")) {
     let query: string;
     if (options?.cancellationsOnly) {
-      query = 'from:info@khelomore.com subject:"has been modified"';
+      query = `from:info@khelomore.com ${khelomoreChangeEmailSubjectQuery()}`;
     } else if (options?.bookingsOnly) {
       query =
         'from:info@khelomore.com subject:"You have a new booking from KheloMore"';
     } else {
-      query =
-        'from:info@khelomore.com (subject:"You have a new booking from KheloMore" OR subject:"has been modified")';
+      query = `from:info@khelomore.com (subject:"You have a new booking from KheloMore" OR ${khelomoreChangeEmailSubjectQuery()})`;
     }
     if (venue) query += ` "${venue}"`;
     query += ` after:${formatGmailDate(since)}`;

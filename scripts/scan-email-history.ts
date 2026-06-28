@@ -6,6 +6,7 @@ import {
   isKhelomoreBookingEmail,
   matchesVenueFilter,
   parseBookingId,
+  khelomoreChangeEmailSubjectQuery,
   parseKhelomoreCancelledBookings,
   parseKhelomoreEmails,
 } from "../src/lib/email-parser";
@@ -87,7 +88,7 @@ async function searchUids(
   venue: string
 ) {
   let query =
-    'from:info@khelomore.com (subject:"You have a new booking from KheloMore" OR subject:"has been modified")';
+    `from:info@khelomore.com (subject:"You have a new booking from KheloMore" OR ${khelomoreChangeEmailSubjectQuery()})`;
   if (venue) query += ` "${venue}"`;
   query += ` after:${formatGmailDate(since)}`;
   if (before) query += ` before:${formatGmailDate(before)}`;

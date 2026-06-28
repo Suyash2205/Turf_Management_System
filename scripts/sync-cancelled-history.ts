@@ -3,6 +3,7 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { prisma } from "../src/lib/db";
 import {
+  khelomoreChangeEmailSubjectQuery,
   parseBookingId,
   parseKhelomoreCancelledBookings,
 } from "../src/lib/email-parser";
@@ -38,7 +39,7 @@ async function processBatch(since: Date, before?: Date) {
   const lock = await client.getMailboxLock("INBOX");
 
   try {
-    let query = `from:info@khelomore.com subject:"has been modified"`;
+    let query = `from:info@khelomore.com ${khelomoreChangeEmailSubjectQuery()}`;
     const venue = process.env.KHELOMORE_VENUE_NAME?.trim();
     if (venue) query += ` "${venue}"`;
     query += ` after:${formatGmailDate(since)}`;

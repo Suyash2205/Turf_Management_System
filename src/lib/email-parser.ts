@@ -220,7 +220,7 @@ export function parseBookingId(subject: string, text: string): string | null {
   );
   if (subjectMatch) return subjectMatch[1];
   const modifiedSubjectMatch = subject.match(
-    /Booking\s+id\s+([A-Z0-9-]+)\s+has\s+been\s+modified/i
+    /Booking\s+id\s+([A-Z0-9-]+)\s+has\s+been\s+(?:modified|cancelled)/i
   );
   if (modifiedSubjectMatch) return modifiedSubjectMatch[1];
 
@@ -700,9 +700,15 @@ export function isKhelomoreBookingEmail(from: string, subject: string): boolean 
   const subjectMatches =
     subjectLower.includes("you have a new booking from khelomore") ||
     (subjectLower.includes("booking id") &&
-      subjectLower.includes("has been modified"));
+      (subjectLower.includes("has been modified") ||
+        subjectLower.includes("has been cancelled")));
 
   return fromMatches && subjectMatches;
+}
+
+/** Gmail raw query fragment for Khelomore booking-change emails. */
+export function khelomoreChangeEmailSubjectQuery() {
+  return '(subject:"has been modified" OR subject:"has been cancelled")';
 }
 
 export const SAMPLE_KHELOMORE_EMAIL = `
