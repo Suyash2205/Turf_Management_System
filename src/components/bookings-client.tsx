@@ -58,8 +58,8 @@ export function BookingsClient({
   const [activeId, setActiveId] = useState<string | null>(null);
   const { run } = useLoading();
 
-  async function loadBookings(forDate?: string) {
-    setLoading(true);
+  async function loadBookings(forDate?: string, silent = false) {
+    if (!silent) setLoading(true);
     const listDate = forDate ?? date;
     try {
       await run(async () => {
@@ -72,12 +72,29 @@ export function BookingsClient({
         setBookings(data);
       });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     loadBookings();
+  }, [date, statusFilter, verifyFilter]);
+
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadBookings(undefined, true);
+    };
+
+    const interval = setInterval(refreshIfVisible, 60_000);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
   }, [date, statusFilter, verifyFilter]);
 
   function bookingHref(id: string) {
