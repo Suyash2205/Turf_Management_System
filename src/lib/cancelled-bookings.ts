@@ -13,6 +13,7 @@ const EMAIL_SYNC_ACTOR = "email-sync@turfpay.com";
 export type CancelBookingLogContext = {
   emailSubject?: string;
   source?: "email-sync" | "cancelled-history-script";
+  disableAudit?: boolean;
 };
 
 const bookingSelect = {
@@ -141,6 +142,7 @@ async function logRemovedBookings(
   }>,
   context?: CancelBookingLogContext
 ) {
+  if (context?.disableAudit) return;
   for (const booking of bookings) {
     const dateLabel = booking.bookingDate.toISOString().slice(0, 10);
     const timeLabel =
@@ -175,6 +177,7 @@ async function logUpdatedBooking(
   update: { startTime: string; endTime: string },
   context?: CancelBookingLogContext
 ) {
+  if (context?.disableAudit) return;
   const dateLabel = booking.bookingDate.toISOString().slice(0, 10);
   await logAudit({
     action: "BOOKING_CANCELLED",
@@ -261,12 +264,13 @@ export async function applyKhelomoreBookingChanges(
     active: ParsedBookingEmail[];
   },
   context?: CancelBookingLogContext
-): Promise<{ removed: number; updated: number }> {
-  if (!baseExternalId) return { removed: 0, updated: 0 };
+): Promise<{ removed: number; updated: number; updatedBookingIds: string[] }> {
+  if (!baseExternalId) return { removed: 0, updated: 0, updatedBookingIds: [] };
 
   let removed = 0;
   let updated = 0;
   const touchedIds = new Set<string>();
+  const updatedBookingIds = new Set<string>();
 
   if (modification.cancelled.length === 0) {
     const toRemove = await prisma.booking.findMany({
@@ -285,7 +289,7 @@ export async function applyKhelomoreBookingChanges(
       await logRemovedBookings(toRemove, context);
       removed += toRemove.length;
     }
-    return { removed, updated };
+    return { removed, updated, updatedBookingIds: [] };
   }
 
   for (const slot of modification.cancelled) {
@@ -325,6 +329,7 @@ export async function applyKhelomoreBookingChanges(
         { startTime: change.startTime, endTime: change.endTime },
         context
       );
+      updatedBookingIds.add(booking.id);
       updated++;
     }
   }
@@ -358,11 +363,12 @@ export async function applyKhelomoreBookingChanges(
         { startTime: active.startTime, endTime: active.endTime },
         context
       );
+      updatedBookingIds.add(booking.id);
       updated++;
     }
   }
 
-  return { removed, updated };
+  return { removed, updated, updatedBookingIds: [...updatedBookingIds] };
 }
 
 /** @deprecated Use applyKhelomoreBookingChanges */

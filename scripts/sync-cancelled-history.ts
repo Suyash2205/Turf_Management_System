@@ -10,9 +10,11 @@ import {
 import { applyKhelomoreBookingChanges } from "../src/lib/cancelled-bookings";
 import { recalculateBookingStatus } from "../src/lib/bookings";
 
-const TOTAL_DAYS = 220; // matches Gmail inbox retention used by full-reimport
+const TOTAL_DAYS = parseInt(process.env.CANCEL_SWEEP_DAYS || "60", 10);
 const BATCH_DAYS = 14;
 const MAX_RETRIES = 3;
+const LARGE_SWEEP_DAYS = 90;
+const ENABLE_AUDIT_LOGS = process.env.CANCEL_SWEEP_AUDIT_LOGS === "true";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -41,6 +43,7 @@ async function processBatch(since: Date, before?: Date) {
   let cancelledEmails = 0;
   let removed = 0;
   let updated = 0;
+  const updatedBookingIds = new Set<string>();
 
   await client.connect();
   const lock = await client.getMailboxLock("INBOX");
@@ -76,17 +79,26 @@ async function processBatch(since: Date, before?: Date) {
         {
           emailSubject: subject,
           source: "cancelled-history-script",
+          disableAudit: !ENABLE_AUDIT_LOGS,
         }
       );
       removed += result.removed;
       updated += result.updated;
+      for (const id of result.updatedBookingIds) {
+        updatedBookingIds.add(id);
+      }
     }
   } finally {
     lock.release();
     await client.logout();
   }
 
-  return { cancelledEmails, removed, updated };
+  return {
+    cancelledEmails,
+    removed,
+    updated,
+    updatedBookingIds: [...updatedBookingIds],
+  };
 }
 
 async function processBatchWithRetry(since: Date, before?: Date) {
@@ -100,13 +112,20 @@ async function processBatchWithRetry(since: Date, before?: Date) {
       await sleep(delay);
     }
   }
-  return { cancelledEmails: 0, removed: 0 };
+  return { cancelledEmails: 0, removed: 0, updated: 0, updatedBookingIds: [] };
 }
 
 async function main() {
+  if (TOTAL_DAYS > LARGE_SWEEP_DAYS && process.env.ALLOW_LARGE_CANCEL_SWEEP !== "true") {
+    throw new Error(
+      `Refusing expensive sweep: CANCEL_SWEEP_DAYS=${TOTAL_DAYS}. Set ALLOW_LARGE_CANCEL_SWEEP=true to override.`
+    );
+  }
+
   let totalCancelledEmails = 0;
   let totalRemoved = 0;
   let totalUpdated = 0;
+  const updatedBookingIds = new Set<string>();
 
   const beforeCount = await prisma.booking.count({
     where: { NOT: { emailMessageId: { startsWith: "manual:" } } },
@@ -134,6 +153,9 @@ async function main() {
     totalCancelledEmails += result.cancelledEmails;
     totalRemoved += result.removed;
     totalUpdated += result.updated;
+    for (const id of result.updatedBookingIds) {
+      updatedBookingIds.add(id);
+    }
     console.log(
       `${result.cancelledEmails} modification emails, ${result.removed} removed, ${result.updated} updated`
     );
@@ -147,7 +169,7 @@ async function main() {
     data: {
       emailsFound: totalCancelledEmails,
       bookingsCreated: 0,
-      errors: `Cancelled-history sweep: ${totalCancelledEmails} emails, removed ${totalRemoved}, ${beforeCount} -> ${afterCount} email bookings`,
+      errors: `Cancelled-history sweep (${TOTAL_DAYS}d): ${totalCancelledEmails} emails, removed ${totalRemoved}, updated ${totalUpdated}, ${beforeCount} -> ${afterCount} email bookings`,
     },
   });
 
@@ -157,13 +179,12 @@ async function main() {
   console.log(`Bookings updated (duration trimmed): ${totalUpdated}`);
   console.log(`Email bookings: ${beforeCount} -> ${afterCount}`);
 
-  if (totalRemoved > 0) {
-    console.log("\nRecalculating payment statuses...");
-    const allBookings = await prisma.booking.findMany({ select: { id: true } });
-    for (const booking of allBookings) {
-      await recalculateBookingStatus(booking.id);
+  if (updatedBookingIds.size > 0) {
+    console.log("\nRecalculating payment statuses for updated bookings...");
+    for (const id of updatedBookingIds) {
+      await recalculateBookingStatus(id);
     }
-    console.log(`Recalculated ${allBookings.length} bookings`);
+    console.log(`Recalculated ${updatedBookingIds.size} bookings`);
   }
 }
 

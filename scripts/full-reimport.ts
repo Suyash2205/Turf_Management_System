@@ -7,6 +7,12 @@ const TOTAL_DAYS = 220; // Gmail has ~7 months; 220 covers it with margin
 const BATCH_DAYS = 14;
 
 async function main() {
+  if (process.env.ALLOW_FULL_REIMPORT !== "true") {
+    throw new Error(
+      "Refusing expensive full reimport. Set ALLOW_FULL_REIMPORT=true for intentional runs."
+    );
+  }
+
   const manualBefore = await prisma.booking.count({
     where: { emailMessageId: { startsWith: "manual:" } },
   });
