@@ -307,6 +307,7 @@ function parseSlots(
   text: string,
   options?: {
     cancelledOnly?: boolean;
+    excludeCancelled?: boolean;
   }
 ) {
   const section = text.match(
@@ -409,6 +410,7 @@ function parseSlots(
     }
 
     if (options?.cancelledOnly && !cancelled) continue;
+    if (options?.excludeCancelled && cancelled) continue;
 
     day.slots.push({
       start: timeRange.start,
@@ -570,15 +572,15 @@ function buildBookingFromDayGroup(
   };
 }
 
-export function parseKhelomoreEmails(
+function buildKhelomoreBookingsFromText(
   subject: string,
-  body: string
+  text: string,
+  slotOptions?: { excludeCancelled?: boolean }
 ): ParsedBookingEmail[] {
-  const text = normalizeEmailBody(body);
   const user = parseUserDetails(text);
   const venue = parseVenueDetails(text);
   const bill = parseBillDetails(text);
-  let { dayGroups } = parseSlots(text);
+  let { dayGroups } = parseSlots(text, slotOptions);
   dayGroups = expandBulkRecurringDayGroups(dayGroups, bill);
   const baseExternalId = parseBookingId(subject, text);
 
@@ -631,6 +633,14 @@ export function parseKhelomoreEmails(
   return bookings;
 }
 
+export function parseKhelomoreEmails(
+  subject: string,
+  body: string
+): ParsedBookingEmail[] {
+  const text = normalizeEmailBody(body);
+  return buildKhelomoreBookingsFromText(subject, text);
+}
+
 export function parseKhelomoreEmail(
   subject: string,
   body: string
@@ -646,6 +656,32 @@ export function isKhelomoreCancelledEmail(body: string): boolean {
     /status[\s\S]{0,160}cancelled/i.test(text) ||
     normalized.includes("venue booking is cancelled")
   );
+}
+
+export function isKhelomoreModificationSubject(subject: string): boolean {
+  return /booking\s+id\s+[A-Z0-9-]+\s+has\s+been\s+(?:modified|cancelled)/i.test(
+    subject
+  );
+}
+
+/** Returns cancelled and remaining active slots from a modification/cancellation email. */
+export function parseKhelomoreModificationBookings(
+  subject: string,
+  body: string
+): { cancelled: ParsedBookingEmail[]; active: ParsedBookingEmail[] } | null {
+  const isModification =
+    isKhelomoreModificationSubject(subject) || isKhelomoreCancelledEmail(body);
+  if (!isModification) return null;
+
+  const text = normalizeEmailBody(body);
+  const cancelled = isKhelomoreCancelledEmail(body)
+    ? (parseKhelomoreCancelledBookings(subject, body) ?? [])
+    : [];
+  const active = buildKhelomoreBookingsFromText(subject, text, {
+    excludeCancelled: true,
+  });
+
+  return { cancelled, active };
 }
 
 /** Returns cancelled day-wise bookings to remove. `[]` means remove all under booking id. */

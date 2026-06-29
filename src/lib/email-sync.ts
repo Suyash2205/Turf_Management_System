@@ -4,12 +4,12 @@ import { prisma } from "@/lib/db";
 import {
   isKhelomoreBookingEmail,
   matchesVenueFilter,
-  parseKhelomoreCancelledBookings,
+  parseKhelomoreModificationBookings,
   parseKhelomoreEmails,
   parseBookingId,
   khelomoreChangeEmailSubjectQuery,
 } from "@/lib/email-parser";
-import { removeCancelledBookings } from "@/lib/cancelled-bookings";
+import { applyKhelomoreBookingChanges } from "@/lib/cancelled-bookings";
 import { BookingPaymentStatus } from "@prisma/client";
 
 export interface SyncOptions {
@@ -235,18 +235,20 @@ export async function syncBookingsFromEmail(
         const externalId =
           candidate.externalId || extractExternalId(candidate.subject, body);
 
-        const cancelledBookings = options?.bookingsOnly
+        const modification = options?.bookingsOnly
           ? null
-          : parseKhelomoreCancelledBookings(candidate.subject, body);
-        if (cancelledBookings !== null) {
-          bookingsCancelled += await removeCancelledBookings(
+          : parseKhelomoreModificationBookings(candidate.subject, body);
+        if (modification !== null) {
+          const changeResult = await applyKhelomoreBookingChanges(
             externalId,
-            cancelledBookings,
+            modification,
             {
               emailSubject: candidate.subject,
               source: "email-sync",
             }
           );
+          bookingsCancelled +=
+            changeResult.removed + changeResult.updated;
           continue;
         }
 
