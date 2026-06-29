@@ -451,7 +451,9 @@ function parseBillDetails(text: string) {
   const amountReceived = extractLabeledAmount(section, "Amount Received");
   const amountToCollect =
     extractLabeledAmount(section, "Amount to be Collected") ??
-    extractLabeledAmount(section, "Amount Pending");
+    extractLabeledAmount(section, "Amount Pending") ??
+    extractLabeledAmount(section, "Subtotal") ??
+    extractLabeledAmount(section, "Total");
 
   return {
     slotPrice,
@@ -526,10 +528,26 @@ function buildBookingFromDayGroup(
   );
   const amountReceived = bill.amountReceived ?? 0;
   const { paidOnKhelomore } = common;
+  const couponAmount = bill.couponAmount ?? 0;
 
-  let totalAmount = daySlotTotal;
+  let totalAmount: number;
   if (paidOnKhelomore && isSingleDay && amountReceived > 0) {
     totalAmount = amountReceived;
+  } else if (isSingleDay && bill.amountToCollect != null && bill.amountToCollect > 0) {
+    totalAmount = bill.amountToCollect;
+  } else if (daySlotTotal > 0 && allDaySlotTotal > 0 && bill.amountToCollect) {
+    totalAmount = Math.round(
+      (bill.amountToCollect * daySlotTotal) / allDaySlotTotal
+    );
+  } else if (
+    daySlotTotal > 0 &&
+    allDaySlotTotal > 0 &&
+    couponAmount > 0
+  ) {
+    const couponShare = Math.round(
+      (couponAmount * daySlotTotal) / allDaySlotTotal
+    );
+    totalAmount = Math.max(0, daySlotTotal - couponShare);
   } else if (paidOnKhelomore && daySlotTotal > 0) {
     totalAmount = daySlotTotal;
   } else if (daySlotTotal > 0) {
@@ -539,13 +557,18 @@ function buildBookingFromDayGroup(
       (bill.amountToCollect * daySlotTotal) / allDaySlotTotal
     );
   } else if (allDaySlotTotal > 0 && bill.slotPrice) {
-    totalAmount = Math.round((bill.slotPrice * daySlotTotal) / allDaySlotTotal);
+    const netSlotPrice = Math.max(0, bill.slotPrice - couponAmount);
+    totalAmount = Math.round((netSlotPrice * daySlotTotal) / allDaySlotTotal);
   } else if (totalDayCount > 1 && bill.amountToCollect) {
     totalAmount = Math.round(bill.amountToCollect / totalDayCount);
   } else if (totalDayCount > 1 && bill.slotPrice) {
-    totalAmount = Math.round(bill.slotPrice / totalDayCount);
+    totalAmount = Math.round(
+      Math.max(0, bill.slotPrice - couponAmount) / totalDayCount
+    );
   } else {
-    totalAmount = bill.amountToCollect ?? bill.slotPrice ?? 0;
+    totalAmount =
+      bill.amountToCollect ??
+      Math.max(0, (bill.slotPrice ?? 0) - couponAmount);
   }
 
   if (!totalAmount || totalAmount <= 0) return null;
