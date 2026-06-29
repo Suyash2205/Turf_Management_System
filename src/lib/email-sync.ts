@@ -10,6 +10,7 @@ import {
   khelomoreChangeEmailSubjectQuery,
 } from "@/lib/email-parser";
 import { applyKhelomoreBookingChanges } from "@/lib/cancelled-bookings";
+import { isBookingImportCancelled } from "@/lib/cancelled-slot-registry";
 import { BookingPaymentStatus } from "@prisma/client";
 
 export interface SyncOptions {
@@ -220,7 +221,14 @@ export async function syncBookingsFromEmail(
       // Always download bodies so multi-day / bulk emails can fill missing days.
       const uidsToDownload = candidates.map((c) => c.uid);
 
-      // Phase 2: download bodies only for new bookings
+      // Phase 2: download bodies, apply cancellations first, then import bookings.
+      const downloaded: Array<{
+        candidate: EmailCandidate;
+        body: string;
+        baseMessageId: string;
+        externalId: string | null;
+      }> = [];
+
       for await (const message of client.fetch(
         uidsToDownload,
         { source: true },
@@ -231,32 +239,54 @@ export async function syncBookingsFromEmail(
 
         const parsedEmail = await simpleParser(message.source!);
         const body = parsedEmail.html || parsedEmail.text || "";
-        const baseMessageId = parsedEmail.messageId || String(message.uid);
-        const externalId =
-          candidate.externalId || extractExternalId(candidate.subject, body);
+        downloaded.push({
+          candidate,
+          body,
+          baseMessageId: parsedEmail.messageId || String(message.uid),
+          externalId:
+            candidate.externalId || extractExternalId(candidate.subject, body),
+        });
+      }
 
-        const modification = options?.bookingsOnly
-          ? null
-          : parseKhelomoreModificationBookings(candidate.subject, body);
-        if (modification !== null) {
-          const changeResult = await applyKhelomoreBookingChanges(
-            externalId,
-            modification,
-            {
-              emailSubject: candidate.subject,
-              source: "email-sync",
-            }
-          );
-          bookingsCancelled +=
-            changeResult.removed + changeResult.updated;
-          continue;
-        }
+      for (const item of downloaded) {
+        if (options?.bookingsOnly) continue;
 
+        const modification = parseKhelomoreModificationBookings(
+          item.candidate.subject,
+          item.body
+        );
+        if (modification === null) continue;
+
+        const changeResult = await applyKhelomoreBookingChanges(
+          item.externalId,
+          modification,
+          {
+            emailSubject: item.candidate.subject,
+            source: "email-sync",
+          }
+        );
+        bookingsCancelled += changeResult.removed + changeResult.updated;
+      }
+
+      for (const item of downloaded) {
         if (options?.cancellationsOnly) continue;
 
-        const bookingEntries = parseKhelomoreEmails(candidate.subject, body);
+        const modification = parseKhelomoreModificationBookings(
+          item.candidate.subject,
+          item.body
+        );
+        if (modification !== null) continue;
+
+        const bookingEntries = parseKhelomoreEmails(
+          item.candidate.subject,
+          item.body
+        );
         if (bookingEntries.length === 0) {
-          errors.push(`Could not parse: ${candidate.subject.slice(0, 60)}`);
+          if (!options?.cancellationsOnly) {
+            errors.push(
+              `Could not parse: ${item.candidate.subject.slice(0, 60)}`
+            );
+          }
           continue;
         }
 
@@ -264,8 +294,8 @@ export async function syncBookingsFromEmail(
           const dateKey = bookingData.bookingDate.toISOString().slice(0, 10);
           const emailMessageId =
             bookingEntries.length > 1
-              ? `${baseMessageId}#${dateKey}`
-              : baseMessageId;
+              ? `${item.baseMessageId}#${dateKey}`
+              : item.baseMessageId;
 
           const existingMessage = await prisma.booking.findUnique({
             where: { emailMessageId },
@@ -276,6 +306,10 @@ export async function syncBookingsFromEmail(
             bookingData.externalId &&
             knownExternalIds.has(bookingData.externalId)
           ) {
+            continue;
+          }
+
+          if (await isBookingImportCancelled(bookingData, emailMessageId)) {
             continue;
           }
 
@@ -304,7 +338,7 @@ export async function syncBookingsFromEmail(
                 : BookingPaymentStatus.PENDING,
               externalId: bookingData.externalId,
               emailMessageId,
-              rawEmailSubject: candidate.subject,
+              rawEmailSubject: item.candidate.subject,
             },
           });
           bookingsCreated++;

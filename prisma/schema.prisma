@@ -108,6 +108,21 @@ model Booking {
   @@index([bookingDate])
 }
 
+/// Prevents cancelled bookings from being re-imported by email sync.
+model CancelledBookingSlot {
+  id             String   @id @default(cuid())
+  slotKey        String   @unique
+  externalId     String
+  bookingDate    DateTime
+  startTime      String?
+  endTime        String?
+  turfName       String?
+  emailMessageId String?  @unique
+  createdAt      DateTime @default(now())
+
+  @@index([externalId, bookingDate])
+}
+
 model BookingAdjustment {
   id          String                @id @default(cuid())
   bookingId   String

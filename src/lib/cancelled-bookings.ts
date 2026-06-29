@@ -7,6 +7,10 @@ import {
   bookingTimesOverlap,
 } from "@/lib/booking-time";
 import { Prisma } from "@prisma/client";
+import {
+  isBookingImportCancelled,
+  recordCancelledSlots,
+} from "@/lib/cancelled-slot-registry";
 
 const EMAIL_SYNC_ACTOR = "email-sync@turfpay.com";
 
@@ -26,6 +30,7 @@ const bookingSelect = {
   totalAmount: true,
   slotPrice: true,
   turfName: true,
+  emailMessageId: true,
 } as const;
 
 type BookingRow = {
@@ -38,6 +43,7 @@ type BookingRow = {
   totalAmount: Prisma.Decimal;
   slotPrice: Prisma.Decimal | null;
   turfName: string | null;
+  emailMessageId: string | null;
 };
 
 function turfMatches(
@@ -283,6 +289,16 @@ export async function applyKhelomoreBookingChanges(
       select: bookingSelect,
     });
     if (toRemove.length > 0) {
+      await recordCancelledSlots(
+        toRemove.map((booking) => ({
+          externalId: booking.externalId,
+          bookingDate: booking.bookingDate,
+          startTime: booking.startTime,
+          endTime: booking.endTime,
+          turfName: booking.turfName,
+          emailMessageId: booking.emailMessageId,
+        }))
+      );
       await prisma.booking.deleteMany({
         where: { id: { in: toRemove.map((b) => b.id) } },
       });
@@ -291,6 +307,16 @@ export async function applyKhelomoreBookingChanges(
     }
     return { removed, updated, updatedBookingIds: [] };
   }
+
+  await recordCancelledSlots(
+    modification.cancelled.map((slot) => ({
+      externalId: (slot.externalId || baseExternalId)?.split("#")[0],
+      bookingDate: slot.bookingDate,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      turfName: slot.turfName,
+    }))
+  );
 
   for (const slot of modification.cancelled) {
     const matches = await findBookingsForChange(baseExternalId, slot);
@@ -307,6 +333,16 @@ export async function applyKhelomoreBookingChanges(
       touchedIds.add(booking.id);
 
       if (change.action === "delete") {
+        await recordCancelledSlots([
+          {
+            externalId: booking.externalId,
+            bookingDate: booking.bookingDate,
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+            turfName: booking.turfName,
+            emailMessageId: booking.emailMessageId,
+          },
+        ]);
         await prisma.booking.delete({ where: { id: booking.id } });
         await logRemovedBookings([booking], context);
         removed++;
