@@ -3,9 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2, Pencil, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { paymentStatusBadge } from "@/components/ui/badge";
 import { PaymentRecordForm } from "@/components/payment-record-form";
 import { PaymentHistoryItem } from "@/components/payment-history-item";
@@ -75,8 +76,43 @@ export function AdminBookingVerifyClient({
   const [verifyState, setVerifyState] = useState<VerifyState>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(initialBooking.customerName);
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState("");
   const router = useRouter();
   const { run } = useLoading();
+
+  async function saveName() {
+    const trimmed = nameInput.trim();
+    if (!trimmed) {
+      setNameError("Name is required");
+      return;
+    }
+    if (trimmed === booking.customerName) {
+      setEditingName(false);
+      return;
+    }
+    setSavingName(true);
+    setNameError("");
+    try {
+      const res = await fetch(`/api/bookings/${booking.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerName: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update name");
+      setBooking((b) => ({ ...b, customerName: trimmed }));
+      setEditingName(false);
+    } catch (error) {
+      setNameError(
+        error instanceof Error ? error.message : "Failed to update name"
+      );
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   function applyBooking(updated: Record<string, unknown>) {
     setBooking(updated as unknown as Booking);
@@ -142,14 +178,72 @@ export function AdminBookingVerifyClient({
       <Card className={booking.isDoubleBooking ? doubleBookingCardClass : ""}>
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className={booking.isDoubleBooking ? "text-red-900" : ""}>
-              {booking.customerName}
-            </CardTitle>
+            {editingName ? (
+              <div className="flex flex-1 items-center gap-2">
+                <Input
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveName();
+                    if (e.key === "Escape") {
+                      setEditingName(false);
+                      setNameInput(booking.customerName);
+                      setNameError("");
+                    }
+                  }}
+                  autoFocus
+                  disabled={savingName}
+                  className="max-w-xs"
+                  aria-label="Customer name"
+                />
+                <Button
+                  size="sm"
+                  onClick={saveName}
+                  disabled={savingName}
+                  aria-label="Save name"
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditingName(false);
+                    setNameInput(booking.customerName);
+                    setNameError("");
+                  }}
+                  disabled={savingName}
+                  aria-label="Cancel"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <CardTitle
+                className={`flex items-center gap-2 ${
+                  booking.isDoubleBooking ? "text-red-900" : ""
+                }`}
+              >
+                {booking.customerName}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNameInput(booking.customerName);
+                    setEditingName(true);
+                  }}
+                  className="text-slate-400 hover:text-slate-700"
+                  aria-label="Edit name"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </CardTitle>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               {booking.isDoubleBooking && <DoubleBookingBadge />}
               {paymentStatusBadge(booking.paymentStatus)}
             </div>
           </div>
+          {nameError && <p className="text-sm text-red-600">{nameError}</p>}
           <p className="text-sm text-slate-500">
             {formatDate(booking.bookingDate)}
             {booking.startTime &&
