@@ -333,9 +333,10 @@ export async function syncBookingsFromEmail(
               slotPrice: bookingData.slotPrice,
               couponAmount: bookingData.couponAmount,
               paidOnKhelomore: bookingData.paidOnKhelomore,
-              paymentStatus: bookingData.paidOnKhelomore
-                ? BookingPaymentStatus.COMPLETED
-                : BookingPaymentStatus.PENDING,
+              paymentStatus:
+                bookingData.paidOnKhelomore || bookingData.totalAmount <= 0
+                  ? BookingPaymentStatus.COMPLETED
+                  : BookingPaymentStatus.PENDING,
               externalId: bookingData.externalId,
               emailMessageId,
               rawEmailSubject: item.candidate.subject,

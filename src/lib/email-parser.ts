@@ -571,7 +571,15 @@ function buildBookingFromDayGroup(
       Math.max(0, (bill.slotPrice ?? 0) - couponAmount);
   }
 
-  if (!totalAmount || totalAmount <= 0) return null;
+  if (totalAmount <= 0) {
+    // A fully-discounted booking (e.g. a BACKEND_DISCOUNT coupon that offsets the whole
+    // slot price) nets ₹0 to collect but is still a real confirmed booking. Keep it at
+    // ₹0 when a gross price was actually present; only drop when no price could be read
+    // at all, to avoid importing a misleading ₹0 booking that in fact owes money.
+    const grossKnown = daySlotTotal > 0 || (bill.slotPrice ?? 0) > 0;
+    if (!grossKnown) return null;
+    totalAmount = 0;
+  }
 
   const turfNames = [
     ...new Set(group.slots.map((slot) => slot.turfName).filter(Boolean)),
@@ -691,20 +699,30 @@ export function isKhelomoreModificationSubject(subject: string): boolean {
 export function parseKhelomoreModificationBookings(
   subject: string,
   body: string
-): { cancelled: ParsedBookingEmail[]; active: ParsedBookingEmail[] } | null {
+): {
+  cancelled: ParsedBookingEmail[];
+  active: ParsedBookingEmail[];
+  fullCancellation: boolean;
+} | null {
   const isModification =
     isKhelomoreModificationSubject(subject) || isKhelomoreCancelledEmail(body);
   if (!isModification) return null;
 
   const text = normalizeEmailBody(body);
-  const cancelled = isKhelomoreCancelledEmail(body)
+  const cancelledEmail = isKhelomoreCancelledEmail(body);
+  const cancelled = cancelledEmail
     ? (parseKhelomoreCancelledBookings(subject, body) ?? [])
     : [];
   const active = buildKhelomoreBookingsFromText(subject, text, {
     excludeCancelled: true,
   });
 
-  return { cancelled, active };
+  // "Remove the whole booking" is only correct for a genuine cancellation email that
+  // leaves no surviving active slots. A "modified" email that merely parsed no cancelled
+  // slots must NOT wipe the series — otherwise a live recurring booking is silently lost.
+  const fullCancellation = cancelledEmail && active.length === 0;
+
+  return { cancelled, active, fullCancellation };
 }
 
 /** Returns cancelled day-wise bookings to remove. `[]` means remove all under booking id. */

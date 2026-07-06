@@ -268,6 +268,7 @@ export async function applyKhelomoreBookingChanges(
   modification: {
     cancelled: ParsedBookingEmail[];
     active: ParsedBookingEmail[];
+    fullCancellation?: boolean;
   },
   context?: CancelBookingLogContext
 ): Promise<{ removed: number; updated: number; updatedBookingIds: string[] }> {
@@ -278,7 +279,10 @@ export async function applyKhelomoreBookingChanges(
   const touchedIds = new Set<string>();
   const updatedBookingIds = new Set<string>();
 
-  if (modification.cancelled.length === 0) {
+  // Only wipe the entire series for a genuine full cancellation. When a modification
+  // email has no parseable cancelled slots but still lists active slots, fall through to
+  // active-slot reconciliation below instead of deleting everything under the id.
+  if (modification.cancelled.length === 0 && modification.fullCancellation) {
     const toRemove = await prisma.booking.findMany({
       where: {
         OR: [
