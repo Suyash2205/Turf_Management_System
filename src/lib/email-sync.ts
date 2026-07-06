@@ -137,6 +137,17 @@ export async function syncBookingsFromEmail(
     secure: true,
     auth: { user, pass },
     logger: false,
+    // Fail fast on a dead/hung socket instead of blocking forever. A stalled fetch
+    // then rejects the pending operation, which the caller's retry can recover from.
+    greetingTimeout: 20000,
+    socketTimeout: 60000,
+  });
+
+  // Without an "error" listener, a mid-operation socket drop emits an unhandled
+  // "error" event that crashes the whole process. Swallow it here — the pending
+  // operation still rejects and is handled by the caller's try/finally.
+  client.on("error", (err) => {
+    console.error("IMAP client error:", err instanceof Error ? err.message : err);
   });
 
   let emailsFound = 0;

@@ -18,6 +18,9 @@ export type CancelBookingLogContext = {
   emailSubject?: string;
   source?: "email-sync" | "cancelled-history-script";
   disableAudit?: boolean;
+  /** Skip writing to the CancelledBookingSlot registry (saves DB operations during
+   *  a one-off reconciliation where the registry is already populated). */
+  skipRegistry?: boolean;
 };
 
 const bookingSelect = {
@@ -293,16 +296,18 @@ export async function applyKhelomoreBookingChanges(
       select: bookingSelect,
     });
     if (toRemove.length > 0) {
-      await recordCancelledSlots(
-        toRemove.map((booking) => ({
-          externalId: booking.externalId,
-          bookingDate: booking.bookingDate,
-          startTime: booking.startTime,
-          endTime: booking.endTime,
-          turfName: booking.turfName,
-          emailMessageId: booking.emailMessageId,
-        }))
-      );
+      if (!context?.skipRegistry) {
+        await recordCancelledSlots(
+          toRemove.map((booking) => ({
+            externalId: booking.externalId,
+            bookingDate: booking.bookingDate,
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+            turfName: booking.turfName,
+            emailMessageId: booking.emailMessageId,
+          }))
+        );
+      }
       await prisma.booking.deleteMany({
         where: { id: { in: toRemove.map((b) => b.id) } },
       });
@@ -312,15 +317,17 @@ export async function applyKhelomoreBookingChanges(
     return { removed, updated, updatedBookingIds: [] };
   }
 
-  await recordCancelledSlots(
-    modification.cancelled.map((slot) => ({
-      externalId: (slot.externalId || baseExternalId)?.split("#")[0],
-      bookingDate: slot.bookingDate,
-      startTime: slot.startTime,
-      endTime: slot.endTime,
-      turfName: slot.turfName,
-    }))
-  );
+  if (!context?.skipRegistry) {
+    await recordCancelledSlots(
+      modification.cancelled.map((slot) => ({
+        externalId: (slot.externalId || baseExternalId)?.split("#")[0],
+        bookingDate: slot.bookingDate,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        turfName: slot.turfName,
+      }))
+    );
+  }
 
   for (const slot of modification.cancelled) {
     const matches = await findBookingsForChange(baseExternalId, slot);
@@ -337,16 +344,18 @@ export async function applyKhelomoreBookingChanges(
       touchedIds.add(booking.id);
 
       if (change.action === "delete") {
-        await recordCancelledSlots([
-          {
-            externalId: booking.externalId,
-            bookingDate: booking.bookingDate,
-            startTime: booking.startTime,
-            endTime: booking.endTime,
-            turfName: booking.turfName,
-            emailMessageId: booking.emailMessageId,
-          },
-        ]);
+        if (!context?.skipRegistry) {
+          await recordCancelledSlots([
+            {
+              externalId: booking.externalId,
+              bookingDate: booking.bookingDate,
+              startTime: booking.startTime,
+              endTime: booking.endTime,
+              turfName: booking.turfName,
+              emailMessageId: booking.emailMessageId,
+            },
+          ]);
+        }
         await prisma.booking.delete({ where: { id: booking.id } });
         await logRemovedBookings([booking], context);
         removed++;

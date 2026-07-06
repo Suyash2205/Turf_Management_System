@@ -5,6 +5,23 @@ import { recalculateBookingStatus } from "../src/lib/bookings";
 
 const TOTAL_DAYS = 220; // Gmail has ~7 months; 220 covers it with margin
 const BATCH_DAYS = 14;
+const MAX_RETRIES = 4;
+
+/** Retry a batch on transient network/IMAP failures instead of aborting the whole run. */
+async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (attempt === MAX_RETRIES) throw error;
+      const delay = attempt * 5000;
+      console.log(`\n  ${label} failed (${msg}); retry ${attempt}/${MAX_RETRIES} in ${delay / 1000}s...`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw new Error("unreachable");
+}
 
 async function main() {
   if (process.env.ALLOW_FULL_REIMPORT !== "true") {
@@ -38,12 +55,16 @@ async function main() {
     const toDays = Math.max(0, start - BATCH_DAYS);
     process.stdout.write(`Import batch ${toDays}-${fromDays}d... `);
 
-    const result = await syncBookingsFromEmail(true, {
-      fromDaysAgo: fromDays,
-      toDaysAgo: toDays,
-      skipLog: true,
-      bookingsOnly: true,
-    });
+    const result = await withRetry(
+      () =>
+        syncBookingsFromEmail(true, {
+          fromDaysAgo: fromDays,
+          toDaysAgo: toDays,
+          skipLog: true,
+          bookingsOnly: true,
+        }),
+      `Import batch ${toDays}-${fromDays}d`
+    );
 
     totalCreated += result.bookingsCreated;
     totalEmails += result.emailsFound;
@@ -71,12 +92,16 @@ async function main() {
     const toDays = Math.max(0, start - BATCH_DAYS);
     process.stdout.write(`Cancel batch ${toDays}-${fromDays}d... `);
 
-    const result = await syncBookingsFromEmail(true, {
-      fromDaysAgo: fromDays,
-      toDaysAgo: toDays,
-      skipLog: true,
-      cancellationsOnly: true,
-    });
+    const result = await withRetry(
+      () =>
+        syncBookingsFromEmail(true, {
+          fromDaysAgo: fromDays,
+          toDaysAgo: toDays,
+          skipLog: true,
+          cancellationsOnly: true,
+        }),
+      `Cancel batch ${toDays}-${fromDays}d`
+    );
 
     totalRemoved += result.bookingsCancelled;
     cancelEmails += result.emailsFound;
