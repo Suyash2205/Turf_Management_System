@@ -38,8 +38,20 @@ export function EmailSyncStatus({ className = "" }: { className?: string }) {
     }
 
     load();
-    const interval = setInterval(load, 60_000);
-    return () => clearInterval(interval);
+
+    // Sync runs once a day via cron, so refresh only when the user returns to
+    // the tab instead of polling every minute (which kept a Vercel Fluid
+    // instance warm 24/7 and ran a DB query per minute, even in background tabs).
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void load();
+    };
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
   }, []);
 
   if (!status) return null;

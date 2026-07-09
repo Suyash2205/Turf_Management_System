@@ -80,18 +80,19 @@ export function BookingsClient({
     loadBookings();
   }, [date, statusFilter, verifyFilter]);
 
+  // Refresh only when the user actually returns to the tab. Email sync runs
+  // once a day (cron), so a continuous interval added no value while keeping a
+  // Vercel Fluid instance provisioned 24/7 and burning DB operations.
   useEffect(() => {
     const refreshIfVisible = () => {
       if (document.visibilityState !== "visible") return;
       void loadBookings(undefined, true);
     };
 
-    const interval = setInterval(refreshIfVisible, 60_000);
     window.addEventListener("focus", refreshIfVisible);
     document.addEventListener("visibilitychange", refreshIfVisible);
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener("focus", refreshIfVisible);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
