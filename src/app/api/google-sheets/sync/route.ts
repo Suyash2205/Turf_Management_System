@@ -2,18 +2,13 @@ import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 import { syncDatabaseToGoogleSheets } from "@/lib/google-sheets-sync";
+import { isCronRequest } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 function isAuthorized(request: Request, session: Session | null) {
-  const cronSecret = request.headers.get("x-cron-secret");
-  const querySecret = new URL(request.url).searchParams.get("secret");
-  const isCron =
-    cronSecret === process.env.CRON_SECRET ||
-    querySecret === process.env.CRON_SECRET;
-
-  if (isCron) return true;
+  if (isCronRequest(request)) return true;
   return !!session?.user && session.user.role === "ADMIN";
 }
 

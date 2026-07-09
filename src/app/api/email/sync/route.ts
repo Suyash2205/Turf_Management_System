@@ -3,18 +3,13 @@ import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 import { syncBookingsFromEmail } from "@/lib/email-sync";
 import { logAudit } from "@/lib/audit-log";
+import { isCronRequest } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 function isAuthorized(request: Request, session: Session | null) {
-  const cronSecret = request.headers.get("x-cron-secret");
-  const querySecret = new URL(request.url).searchParams.get("secret");
-  const isCron =
-    cronSecret === process.env.CRON_SECRET ||
-    querySecret === process.env.CRON_SECRET;
-
-  if (isCron) return true;
+  if (isCronRequest(request)) return true;
   return !!session?.user && session.user.role === "ADMIN";
 }
 
