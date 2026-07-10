@@ -22,15 +22,30 @@ function formatSyncTime(iso: string) {
   });
 }
 
+/**
+ * The sync runs daily. If it has not run in 36h it is broken, and the failure is
+ * otherwise invisible: a 401'd cron looks like a success to the scheduler.
+ */
+const STALE_AFTER_MS = 36 * 60 * 60 * 1000;
+
+function isSyncStale(data: EmailSyncStatusData): boolean {
+  if (!data.lastSyncedAt) return true;
+  return Date.now() - new Date(data.lastSyncedAt).getTime() > STALE_AFTER_MS;
+}
+
 export function EmailSyncStatus({ className = "" }: { className?: string }) {
   const [status, setStatus] = useState<EmailSyncStatusData | null>(null);
+  const [stale, setStale] = useState(false);
 
   useEffect(() => {
     async function load() {
       try {
         const res = await fetch("/api/email/sync/status");
         if (res.ok) {
-          setStatus(await res.json());
+          const data: EmailSyncStatusData = await res.json();
+          setStatus(data);
+          // Evaluated here, not during render, so the component stays pure.
+          setStale(isSyncStale(data));
         }
       } catch {
         setStatus(null);
@@ -56,14 +71,7 @@ export function EmailSyncStatus({ className = "" }: { className?: string }) {
 
   if (!status) return null;
 
-  // The sync runs daily. If it has not run in 36h it is broken, and the failure
-  // is otherwise invisible: a 401'd cron looks like a success to the scheduler.
-  const staleAfterMs = 36 * 60 * 60 * 1000;
-  const isStale =
-    !status.lastSyncedAt ||
-    Date.now() - new Date(status.lastSyncedAt).getTime() > staleAfterMs;
-
-  if (isStale) {
+  if (stale) {
     return (
       <div className={className}>
         <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
