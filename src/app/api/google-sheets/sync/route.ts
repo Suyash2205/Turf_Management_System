@@ -3,6 +3,7 @@ import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 import { syncDatabaseToGoogleSheets } from "@/lib/google-sheets-sync";
 import { isCronRequest } from "@/lib/cron-auth";
+import { pingHeartbeat } from "@/lib/heartbeat";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -20,9 +21,11 @@ async function handleSync(request: Request) {
 
   try {
     const result = await syncDatabaseToGoogleSheets();
+    await pingHeartbeat(process.env.HEARTBEAT_SHEETS_SYNC_URL, "success");
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     console.error("Google Sheets sync failed:", error);
+    await pingHeartbeat(process.env.HEARTBEAT_SHEETS_SYNC_URL, "fail");
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Sheets sync failed" },
       { status: 500 }

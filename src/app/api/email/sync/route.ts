@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { syncBookingsFromEmail } from "@/lib/email-sync";
 import { logAudit } from "@/lib/audit-log";
 import { isCronRequest } from "@/lib/cron-auth";
+import { pingHeartbeat } from "@/lib/heartbeat";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -36,6 +37,7 @@ async function handleSync(request: Request) {
         : undefined;
 
     const result = await syncBookingsFromEmail(fullSync, options);
+    await pingHeartbeat(process.env.HEARTBEAT_EMAIL_SYNC_URL, "success");
 
     if (session?.user) {
       await logAudit({
@@ -56,6 +58,7 @@ async function handleSync(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("Email sync error:", error);
+    await pingHeartbeat(process.env.HEARTBEAT_EMAIL_SYNC_URL, "fail");
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Sync failed" },
       { status: 500 }
