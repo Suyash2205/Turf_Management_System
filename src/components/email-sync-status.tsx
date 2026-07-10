@@ -56,24 +56,41 @@ export function EmailSyncStatus({ className = "" }: { className?: string }) {
 
   if (!status) return null;
 
+  // The sync runs daily. If it has not run in 36h it is broken, and the failure
+  // is otherwise invisible: a 401'd cron looks like a success to the scheduler.
+  const staleAfterMs = 36 * 60 * 60 * 1000;
+  const isStale =
+    !status.lastSyncedAt ||
+    Date.now() - new Date(status.lastSyncedAt).getTime() > staleAfterMs;
+
+  if (isStale) {
+    return (
+      <div className={className}>
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          ⚠ Gmail sync has not run{" "}
+          {status.lastSyncedAt ? (
+            <>since {formatSyncTime(status.lastSyncedAt)}</>
+          ) : (
+            "at all"
+          )}
+          . New bookings may be missing from this list.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
       <p className="text-xs text-slate-500">
-        {status.lastSyncedAt ? (
-          <>
-            Last Gmail sync:{" "}
-            <span className="font-medium text-slate-700">
-              {formatSyncTime(status.lastSyncedAt)}
-            </span>
-            {" · "}
-            {status.emailsFound} emails checked
-            {status.bookingsCreated > 0
-              ? `, ${status.bookingsCreated} new booking${status.bookingsCreated === 1 ? "" : "s"}`
-              : ""}
-          </>
-        ) : (
-          "No Gmail sync recorded yet"
-        )}
+        Last Gmail sync:{" "}
+        <span className="font-medium text-slate-700">
+          {formatSyncTime(status.lastSyncedAt!)}
+        </span>
+        {" · "}
+        {status.emailsFound} emails checked
+        {status.bookingsCreated > 0
+          ? `, ${status.bookingsCreated} new booking${status.bookingsCreated === 1 ? "" : "s"}`
+          : ""}
       </p>
       <p className="text-xs text-slate-400">{status.schedule}</p>
     </div>
