@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { syncBookingsFromEmail } from "@/lib/email-sync";
 import { logAudit } from "@/lib/audit-log";
 import { isCronRequest } from "@/lib/cron-auth";
@@ -8,6 +9,21 @@ import { pingHeartbeat } from "@/lib/heartbeat";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+// A scheduled sync only needs to do real work every ~15 min. If something calls
+// this endpoint more often (a stray external poller, an overlapping cron), skip
+// the IMAP + DB work instead of repeating it. Bounds cost regardless of caller.
+// Admin-triggered and full syncs always run — they explicitly asked for it.
+const MIN_SYNC_INTERVAL_MS = 8 * 60 * 1000;
+
+async function recentlySynced(): Promise<boolean> {
+  const last = await prisma.emailSyncLog.findFirst({
+    orderBy: { syncedAt: "desc" },
+    select: { syncedAt: true },
+  });
+  if (!last) return false;
+  return Date.now() - last.syncedAt.getTime() < MIN_SYNC_INTERVAL_MS;
+}
 
 function isAuthorized(request: Request, session: Session | null) {
   if (isCronRequest(request)) return true;
@@ -26,6 +42,11 @@ async function handleSync(request: Request) {
     const fullSync = searchParams.get("full") === "true";
     const fromDays = searchParams.get("fromDays");
     const toDays = searchParams.get("toDays");
+
+    const isAdmin = session?.user?.role === "ADMIN";
+    if (!isAdmin && !fullSync && (await recentlySynced())) {
+      return NextResponse.json({ skipped: "throttled" });
+    }
 
     const options =
       fromDays != null
