@@ -8,7 +8,9 @@ import { isCronRequest } from "@/lib/cron-auth";
 import { pingHeartbeat } from "@/lib/heartbeat";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// A backlog sync downloads many IMAP bodies and can exceed 60s, which silently
+// 504'd every scheduled run before it could write its log (Pro allows up to 300).
+export const maxDuration = 300;
 
 // A scheduled sync only needs to do real work every ~15 min. If something calls
 // this endpoint more often (a stray external poller, an overlapping cron), skip
